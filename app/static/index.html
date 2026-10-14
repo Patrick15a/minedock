@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0e14"><title>Anmelden · BexoGames MineDock</title>
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css"><script defer src="/static/app.js"></script>
+</head>
+<body>
+  <section id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-brand"><span class="brand-mark" aria-hidden="true">B</span><span class="brand-copy"><strong>BexoGames</strong><small>Minecraft Manager</small></span></div>
+      <h1>Anmelden</h1><p>Minecraft-Server und Modpacks zentral verwalten.</p>
+      <form id="login-form"><label>Benutzername<input name="username" value="admin" autocomplete="username" required></label><label>Passwort<input name="password" type="password" autocomplete="current-password" required></label><p id="login-error" class="error" role="alert"></p><button class="primary" type="submit">Anmelden</button></form>
+    </div>
+  </section>
+  <div id="shell" hidden>
+    <aside class="sidebar">
+      <details class="app-switcher">
+        <summary class="brand" aria-label="BexoGames Anwendungen"><span class="brand-mark" aria-hidden="true">B</span><span class="brand-copy"><strong>BexoGames</strong><small>Minecraft Manager</small></span><span class="brand-chevron">⌄</span></summary>
+        <div class="app-menu"><span class="app-current">MineDock <small>Aktuell</small></span></div>
+      </details>
+      <nav aria-label="Hauptnavigation"><button data-page="overview" class="active">Übersicht <b id="nav-count">0</b></button><button data-page="modpacks">Modpacks</button><button data-page="host">Host & Ressourcen</button><button data-page="archive">Archiv</button></nav>
+      <div class="sidebar-bottom"><div class="account-label">Administrator · admin</div><button id="logout" class="account">Abmelden</button></div>
+    </aside>
+    <div class="main-shell"><main id="main"></main><footer class="page-footer"><span>BexoGames · MineDock</span><span>Minecraft Manager</span></footer></div>
+  </div>
+  <dialog id="server-dialog"><form id="server-form"><div class="dialog-head"><div><h2 id="dialog-title">Server erstellen</h2><p>Minecraft installieren oder ein Modpack importieren.</p></div><button type="button" class="icon-button" id="close-dialog" aria-label="Schließen">×</button></div><div id="server-fields"></div><p id="form-error" class="error" role="alert"></p><div class="dialog-footer"><button type="button" id="cancel-dialog" class="secondary">Abbrechen</button><button class="primary" id="create-submit" type="submit">Server erstellen</button></div></form></dialog>
+  <div id="toast" role="status" hidden></div>
+</body></html>
