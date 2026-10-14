@@ -6,8 +6,6 @@ MineDock is a self-hosted Minecraft Java server management panel for Debian 13. 
 
 An initial working panel is deployed in a Debian 13 LXC container behind a separate Apache HTTPS reverse proxy. Panel installation, login and service operation have been verified. Minecraft gameplay and real Fabric/Forge/NeoForge installation have not yet been validated end to end.
 
-**CurseForge integration is implemented but awaiting suitable API access.** Current authenticated requests for Minecraft modpack metadata return HTTP 403. The presence of a stored key is not proof of valid API access. No successful live CurseForge import is claimed.
-
 ## Features
 
 - Create, configure, start, stop, restart and archive Minecraft servers.
@@ -19,13 +17,11 @@ An initial working panel is deployed in a Debian 13 LXC container behind a separ
 - One administrator account, password hashing, session authentication and CSRF protection.
 - Configurable RAM budget and a dedicated non-root systemd service.
 
-## CurseForge API integration
+## CurseForge API key
 
-See [CurseForge integration and API application notes](docs/CURSEFORGE.md) for the implementation and intended use.
+A CurseForge API key is required to use the CurseForge integration. **The API key must never be shared with anyone or published.**
 
-Imports search the Minecraft modpack catalog, resolve pinned file metadata and download files from the API-provided URLs. API keys are sent in headers and remain on the operator's server. Missing download URLs lead to a manual download/upload workflow; the importer does not construct alternative CDN URLs to bypass unavailable downloads. No mod files, API credentials, server worlds or production configuration are included in this repository.
-
-A manifest export is not a complete offline server pack. It still requires API access to resolve and fetch its referenced mods. Client-only mods may need to be removed manually. Importing a client pack does not reproduce private server plugins or custom server-side content.
+See [CurseForge API key](docs/CURSEFORGE.md).
 
 ## Installation
 

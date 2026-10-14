@@ -28,7 +28,7 @@ Das Skript installiert Python, Java 21 und einen systemd-Dienst. Es richtet **ke
 sudo bash deploy/install.sh
 ```
 
-Es fragt nach einem eigenen Admin-Passwort und optional nach dem CurseForge-API-Schlüssel. Login: **admin**. Kein Standardpasswort. Schlüssel und Passwörter nicht in Chat oder Shell-Befehlen übergeben. Fuer den Zugriff auf Minecraft-Modpack-Daten ist ein entsprechend freigegebener API-Schluessel erforderlich. Den Drittanbieterzugang beschreibt die [offizielle CurseForge-Antragsseite](https://support.curseforge.com/support/solutions/articles/9000208346-about-the-curseforge-api-and-how-to-apply-for-a-key). Ein Profil-API-Key fuer die Verwaltungs-API ist nicht austauschbar mit diesem Zugang.
+Das Skript fragt nach einem eigenen Admin-Passwort und dem CurseForge-API-Schlüssel. Login: **admin**. Kein Standardpasswort. Für die CurseForge-Funktionen ist ein API-Schlüssel erforderlich. **Dieser Schlüssel darf niemals geteilt, an andere Personen weitergegeben oder veröffentlicht werden.** Die Eingabe kann bei der Installation übersprungen und später ergänzt werden.
 
 Pfade:
 
@@ -131,7 +131,7 @@ Beim Start werden `-Xmx` plus 768 MiB pro laufendem Server gegen das gemeinsame 
 - ZIP-Limit 512 MiB komprimiert, 2 GiB entpackt, 20.000 Einträge. Jede heruntergeladene Datei maximal 512 MiB. Große Packs können diese Grenzen überschreiten.
 - Backups enthalten Serverdateien, nicht die Panel-Datenbank und nicht den API-Schlüssel. Für eine vollständige Migration `/var/lib/minedock` und `/etc/minedock` bei gestopptem Dienst separat sichern.
 - Eine Backup-Wiederherstellung über die Website ist noch nicht enthalten. Ein selbst erstelltes, vertrauenswürdiges Backup bei gestopptem Dienst zunächst in ein **neues temporäres Verzeichnis** entpacken, Inhalt prüfen und dann gezielt zurückkopieren. Bestehenden Serverordner vorher sichern; Eigentümer muss `minedock` bleiben.
-- Panel-Installation und HTTPS-Anmeldung wurden auf Debian 13 im LXC erfolgreich geprueft. Echte Minecraft-Starts, externe Loader-Installationen und CurseForge-Downloads mit einem freigegebenen API-Schluessel sind noch nicht abgenommen.
+- Panel-Installation und HTTPS-Anmeldung wurden auf Debian 13 im LXC erfolgreich geprueft. Echte Minecraft-Starts, externe Loader-Installationen und vollständige CurseForge-Imports sind noch nicht abgenommen.
 
 ## Entwicklung und Tests
 

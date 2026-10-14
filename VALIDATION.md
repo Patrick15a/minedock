@@ -16,6 +16,6 @@ On 14 October 2026, all 49 automated tests passed on Windows with Python 3.12. T
 
 - A real Minecraft server launch through MineDock and an in-game connection.
 - Live Fabric, Forge or NeoForge installation through the importer.
-- A successful CurseForge import using an approved API key. Live Minecraft metadata lookup currently returns HTTP 403.
+- A complete CurseForge modpack import.
 
 The repository contains no real server data, private reference screenshots, QA credentials or deployment access keys. Test credentials in the test suite are synthetic. The published template retains generic host defaults rather than copying the private deployment configuration.
