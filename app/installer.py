@@ -8,6 +8,7 @@ import shutil
 import stat
 import subprocess
 import time
+import unicodedata
 import zipfile
 from pathlib import Path
 from urllib.parse import quote, urlparse, urljoin
@@ -108,8 +109,16 @@ def file_hash(info):
 
 
 def filename(value):
-    if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_() .+\-\[\]]{1,180}\.jar', value):
-        raise ValueError('Ungültiger JAR-Dateiname.')
+    # Keep the original basename: missing-file uploads must match it exactly.
+    # Reserve nine bytes for the .disabled suffix on 255-byte filesystems.
+    if (not isinstance(value, str) or len(value) <= 4 or not value.endswith('.jar')
+            or any(c in '<>:"/\\|?*' or unicodedata.category(c).startswith('C')
+                   or c in '\u2028\u2029' for c in value)
+            or len(value.encode('utf-8')) > 246):
+        display = repr(value[:240]) if isinstance(value, str) else type(value).__name__
+        raise ValueError(f'Ungültiger JAR-Dateiname {display}. '
+                         'Erwartet wird ein einzelner .jar-Dateiname ohne Pfad oder Steuerzeichen '
+                         '(maximal 246 UTF-8-Bytes).')
     return value
 
 
@@ -288,9 +297,13 @@ def install(sid, mode, source=None, version=None):
                 if project <= 0 or file_id <= 0:
                     raise ValueError('Ungültige CurseForge-Datei-ID.')
                 info = cf(f'mods/{project}/files/{file_id}')
-                name = filename(info['fileName'])
+                try:
+                    name = filename(info.get('fileName'))
+                except ValueError as exc:
+                    raise ValueError(f'[Import {index + 1}/{len(manifest["files"])}] '
+                                     f'CurseForge-Projekt {project}, Datei {file_id}: {exc}') from exc
                 manager.log(sid, f'[Import {index + 1}/{len(manifest["files"])}] {name}')
-                target = stage / 'mods' / name
+                target = core.safe_path(stage, 'mods/' + name)
                 if info.get('downloadUrl'):
                     fetch(info['downloadUrl'], target, expected=file_hash(info))
                 else:

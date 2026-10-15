@@ -384,7 +384,7 @@ def mods(sid: str, _=Depends(auth)):
 
 
 class ModAction(BaseModel):
-    name: str = Field(max_length=200)
+    name: str = Field(max_length=255)
     action: Literal['toggle', 'remove']
 
 

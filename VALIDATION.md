@@ -2,7 +2,7 @@
 
 ## Repository snapshot check
 
-On 15 October 2026, all 77 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
+On 15 October 2026, all 114 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
 
 ## Verified before repository preparation
 
@@ -21,6 +21,13 @@ On 15 October 2026, all 77 automated tests passed on Windows with Python 3.12. T
 - The user reports that the role update is installed in the production container.
 - Browser regression checks cover no timed user-list requests or refresh button, no loading flashes while idle, keyboard focus, updates after account changes and page reloads, sidebar profile navigation, preservation of password drafts, and delayed responses after navigation.
 - The subsequent sidebar/profile and polling fix is awaiting deployment.
+
+## CurseForge filename regression
+
+- The local Create a Colony 1.0.6 manifest contains 213 entries. Entry 47 references project 664014, file 4454534 (NoCube's Villagers Sell Animals).
+- The old filename allowlist rejected apostrophes in this mod's JAR and in NoCube's Farmers Compats. All 180 JAR basenames from the local matching server pack pass the revised validation. No pack content is included in the repository.
+- 37 new regression cases cover original names with apostrophes and Unicode, UTF-8 filename limits, traversal and control-character rejection, the entry-47 import path, manual missing-file uploads, and mod enable/disable/removal including long names.
+- Downloads and loader execution in import tests are simulated. The full live pack import remains to be retried after deploying this fix.
 
 ## Not yet verified end to end
 
