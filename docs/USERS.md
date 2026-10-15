@@ -17,7 +17,7 @@ Updates automatically migrate the existing administrator password. The database 
 
 ## Refresh the user list
 
-The user list loads when opened and after you save or delete an account. It does not refresh on a timer and has no separate refresh button. Reopen the user page or reload the browser and return to it to see changes made elsewhere. Unchanged results keep the current table in place.
+The user list loads when opened and after you save or delete an account. It does not refresh on a timer and has no separate refresh button. Reopen the user page or reload the browser and return to it to see changes made elsewhere. Unchanged results keep the current table in place. The global overview polling is also paused on the Users and My account pages, including sidebar and connection-label updates. Delayed background responses from another page are ignored. Live server and console views continue polling when you return to them.
 
 ## Permanently delete a server
 

@@ -204,13 +204,20 @@ async function refreshBackups() {
   if (!$('#backup-list') || state.sid !== sid) return;
   $('#backup-list').innerHTML = data.length ? data.map(b => `<div class="file-row"><span class="file-name">${esc(b.name)}<br><small>${b.size_mb} MB</small></span><a href="/api/servers/${sid}/backups/${encodeURIComponent(b.name)}">Herunterladen ↓</a></div>`).join('') : '<div class="empty-small">Noch keine Backups erstellt.</div>';
 }
-async function refresh() {
-  const data = await api('/overview'); state.servers = data.servers; state.host = data.host; state.user = data.user;
-  $('.account-label').textContent = `${roleNames[state.user.role]} · ${state.user.username}`;
+function liveView() { return !!state.sid || !['users','account'].includes(state.page); }
+function textIfChanged(element, value) { if (element.textContent !== value) element.textContent = value; }
+async function refresh({background=false}={}) {
+  const page = state.page, sid = state.sid, session = state.csrf;
+  const data = await api('/overview');
+  // A response started on another view must not touch a newly opened form or list.
+  if (background && (!liveView() || state.page !== page || state.sid !== sid || state.csrf !== session)) return false;
+  state.servers = data.servers; state.host = data.host; state.user = data.user;
+  textIfChanged($('.account-label'), `${roleNames[state.user.role]} · ${state.user.username}`);
   $('nav [data-page=users]').hidden = state.user.role !== 'admin';
   $('nav [data-page=modpacks]').hidden = !canManage();
-  document.querySelectorAll('.connection-label').forEach(el => el.textContent = state.host.linux ? 'Panel online' : 'Lokale Vorschau');
+  document.querySelectorAll('.connection-label').forEach(el => textIfChanged(el, state.host.linux ? 'Panel online' : 'Lokale Vorschau'));
   document.querySelectorAll('.connection-dot').forEach(el => el.classList.remove('offline'));
+  return true;
 }
 document.addEventListener('click', async event => {
   const b = event.target.closest('button, a.brand'); if (!b || b.disabled) return;
@@ -294,15 +301,21 @@ document.addEventListener('submit', async event => {
   } catch (e) { toast(e.message); } finally { b.disabled = false; }
 });
 setInterval(async () => {
-  if (!state.csrf || polling || document.hidden) return;
+  if (!state.csrf || polling || document.hidden || !liveView()) return;
+  const page = state.page, sid = state.sid;
   polling = true;
   try {
-    await refresh();
+    if (!await refresh({background:true})) return;
     if (state.sid) { updateDetailStatus(); await refreshLogs(); if (state.tab === 'backups') await refreshBackups(); }
     else if (!document.querySelector('dialog[open]') && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
       if (!['users','account'].includes(state.page)) render();
     }
-  } catch (e) { document.querySelectorAll('.connection-label').forEach(el => el.textContent = 'Verbindung unterbrochen'); document.querySelectorAll('.connection-dot').forEach(el => el.classList.add('offline')); }
+  } catch (e) {
+    if (liveView() && state.page === page && state.sid === sid) {
+      document.querySelectorAll('.connection-label').forEach(el => textIfChanged(el, 'Verbindung unterbrochen'));
+      document.querySelectorAll('.connection-dot').forEach(el => el.classList.add('offline'));
+    }
+  }
   finally { polling = false; }
 }, 3500);
 (async () => { try { state.csrf = (await api('/session')).csrf; await enter(); } catch { showLogin(); } })();
@@ -320,7 +333,7 @@ function applyCapabilities() {
 
 async function renderUsers() {
   if (state.user?.role !== 'admin') { state.page = 'overview'; render(); return; }
-  $('#main').innerHTML = heading('Benutzerverwaltung', 'Konten, Rollen und Zugriff auf einzelne Server.', '<button class="primary" data-user-new>＋ Benutzer anlegen</button>') + '<div id="user-list"><div class="panel">Benutzer werden geladen …</div></div>';
+  if (!$('#user-list')) $('#main').innerHTML = heading('Benutzerverwaltung', 'Konten, Rollen und Zugriff auf einzelne Server.', '<button class="primary" data-user-new>＋ Benutzer anlegen</button>') + '<div id="user-list"><div class="panel">Benutzer werden geladen …</div></div>';
   try { await refreshUsers(); } catch (error) { toast(error.message); }
 }
 

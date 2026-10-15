@@ -2,7 +2,7 @@
 
 ## Repository snapshot check
 
-On 15 October 2026, all 165 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
+On 15 October 2026, all 168 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
 
 ## Verified before repository preparation
 
@@ -50,3 +50,9 @@ The repository contains no real server data, private reference screenshots, QA c
 - Chrome checks verify automatic disabling, visible dependency conflicts, persisted manual activation after reload, returning to automatic mode, viewer restrictions, and a 390-pixel layout without horizontal overflow. No JavaScript errors were observed.
 - The 180 actual JARs in the matching local Create a Colony server ZIP were inspected to check metadata compatibility. Mod binaries and private QA data are not included in the repository.
 - Downloads/processes in regression tests remain simulated. This scanner cannot guarantee launch compatibility, and the production updater still requires a root invocation after managed servers have stopped.
+
+## Stable user/account views and frontend caching
+
+- Browser regression checks observe zero overview/user polling and zero DOM mutations in the user page and sidebar across multiple polling intervals. The table, focus and account drafts remain in place. A delayed overview response after navigation is discarded.
+- User save/delete and page reload still load current data; no refresh button was added.
+- Three cache regressions cover content-versioned JavaScript/CSS URLs, HTML `no-store`, script/style revalidation and asset version changes without a process restart. The static HTML template also contains versioned references for frontend-only hotfixes.

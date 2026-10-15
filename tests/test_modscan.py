@@ -199,14 +199,15 @@ def test_import_scans_override_jars(client,sid,tmp_path,monkeypatch):
 def test_upload_completes_profile_reference(client,sid):
     installed(sid)
     blob=jar(fabric('client'))
+    server_blob=jar(fabric('server'))
     import hashlib
     cfg=core.get(sid)
     cfg['mod_sources']={'client.jar':{'project':1,'file':2}}
-    cfg['mod_server_reference']={'keep':[hashlib.sha256(jar(fabric('server'))).hexdigest()],'label':'exact'}
+    cfg['mod_server_reference']={'keep':[hashlib.sha256(server_blob).hexdigest()],'label':'exact'}
     core.save(cfg)
     assert client.post(f'/api/servers/{sid}/upload?kind=mod',files={'file':('client.jar',blob)}).status_code==200
     assert (core.folder(sid)/'mods/client.jar').exists()
-    assert client.post(f'/api/servers/{sid}/upload?kind=mod',files={'file':('server.jar',jar(fabric('server')))}).status_code==200
+    assert client.post(f'/api/servers/{sid}/upload?kind=mod',files={'file':('server.jar',server_blob)}).status_code==200
     assert (core.folder(sid)/'mods/client.jar.disabled').exists()
 
 

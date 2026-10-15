@@ -16,7 +16,7 @@ from typing import Literal
 
 import psutil
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -83,8 +83,10 @@ async def security(request, call_next):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
-    if request.url.path.startswith('/api'):
+    if request.url.path.startswith('/api') or request.url.path == '/':
         response.headers['Cache-Control'] = 'no-store'
+    elif request.url.path in ('/static/app.js', '/static/style.css'):
+        response.headers['Cache-Control'] = 'no-cache'
     return response
 
 
@@ -618,7 +620,12 @@ def delete_server(sid: str, body: Confirmation, _=Depends(auth)):
 
 @app.get('/')
 def index():
-    return FileResponse(STATIC / 'index.html')
+    html = (STATIC / 'index.html').read_text(encoding='utf-8')
+    for name in ('app.js', 'style.css'):
+        version = hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:16]
+        pattern = r'(/static/' + re.escape(name) + r')(?:\?v=[a-zA-Z0-9_-]+)?(?=[\"\'])'
+        html = re.sub(pattern, lambda match: match.group(1) + '?v=' + version, html)
+    return HTMLResponse(html, headers={'Cache-Control': 'no-store'})
 
 
 app.mount('/static', StaticFiles(directory=STATIC), name='static')
