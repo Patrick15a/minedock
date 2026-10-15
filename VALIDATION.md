@@ -18,7 +18,9 @@ On 15 October 2026, all 77 automated tests passed on Windows with Python 3.12. T
 - Deletion tests cover running/busy servers, exact name confirmation, owned backup cleanup, symlink rejection and retry after filesystem failure.
 - Headless Chrome checks cover account creation, assignments, viewer restrictions, password change and re-login, mobile layout, and typed server deletion. No JavaScript errors occurred.
 - Five updater tests cover successful replacement, database/code rollback, syntax rejection, failed backup and failed directory replacement.
-- The role update has been tested locally; installation of this update in the production container remains pending.
+- The user reports that the role update is installed in the production container.
+- Browser regression checks cover no timed user-list requests or refresh button, no loading flashes while idle, keyboard focus, updates after account changes and page reloads, sidebar profile navigation, preservation of password drafts, and delayed responses after navigation.
+- The subsequent sidebar/profile and polling fix is awaiting deployment.
 
 ## Not yet verified end to end
 

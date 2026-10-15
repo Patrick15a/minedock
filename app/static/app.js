@@ -7,7 +7,7 @@ const roleNames = {admin:'Administrator',manager:'Verwalter',operator:'Operator'
 const canManage = () => ['admin','manager'].includes(state.user?.role);
 const canOperate = () => ['admin','manager','operator'].includes(state.user?.role);
 const server = () => state.servers.find(s => s.id === state.sid);
-let toastTimer, polling = false;
+let toastTimer, polling = false, usersRequest = 0;
 
 function toast(message) {
   $('#toast').textContent = message; $('#toast').hidden = false;
@@ -223,7 +223,7 @@ document.addEventListener('click', async event => {
       const confirmation = prompt(`Benutzer „${user.username}“ dauerhaft löschen? Seine Server bleiben erhalten. Gib den Benutzernamen zur Bestätigung ein.`);
       if (confirmation === null) return;
       await api(`/users/${user.id}`, {method:'DELETE',body:{confirmation}});
-      await renderUsers(); toast('Benutzer gelöscht.');
+      await refreshUsers(); toast('Benutzer gelöscht.');
     }
     else if (b.hasAttribute('data-delete-server')) openDelete();
     else if (b.dataset.page || b.matches('.brand') || b.hasAttribute('data-back')) {
@@ -291,7 +291,9 @@ setInterval(async () => {
   try {
     await refresh();
     if (state.sid) { updateDetailStatus(); await refreshLogs(); if (state.tab === 'backups') await refreshBackups(); }
-    else if (!document.querySelector('dialog[open]') && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) render();
+    else if (!document.querySelector('dialog[open]') && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
+      if (!['users','account'].includes(state.page)) render();
+    }
   } catch (e) { document.querySelectorAll('.connection-label').forEach(el => el.textContent = 'Verbindung unterbrochen'); document.querySelectorAll('.connection-dot').forEach(el => el.classList.add('offline')); }
   finally { polling = false; }
 }, 3500);
@@ -310,13 +312,21 @@ function applyCapabilities() {
 
 async function renderUsers() {
   if (state.user?.role !== 'admin') { state.page = 'overview'; render(); return; }
-  $('#main').innerHTML = heading('Benutzerverwaltung', 'Konten, Rollen und Zugriff auf einzelne Server.', '<button class="primary" data-user-new>＋ Benutzer anlegen</button>') + '<div id="user-list" class="panel">Benutzer werden geladen …</div>';
-  try {
-    const data = await api('/users');
-    if (state.page !== 'users' || state.sid || !$('#user-list')) return;
-    state.users = data.users;
-    $('#user-list').outerHTML = `<div class="table-wrap" role="region" aria-label="Benutzerliste" tabindex="0"><table><thead><tr><th>Benutzer</th><th>Rolle</th><th>Zugriff</th><th>Status</th><th>Aktionen</th></tr></thead><tbody>${state.users.map(u => `<tr><td><b>${esc(u.username)}</b>${u.id === state.user.id ? '<span class="subline">Dein Konto</span>' : ''}</td><td>${esc(roleNames[u.role])}</td><td>${u.role === 'admin' ? 'Alle Server' : `${u.server_ids.length} zugewiesen`}</td><td><span class="badge ${u.active ? 'running' : 'stopped'}">${u.active ? 'Aktiv' : 'Deaktiviert'}</span></td><td class="user-actions"><button class="secondary" data-user-edit="${u.id}">Bearbeiten</button>${u.id !== state.user.id ? `<button class="text-button" data-user-delete="${u.id}">Löschen</button>` : ''}</td></tr>`).join('')}</tbody></table></div><div class="panel role-guide"><h3>Rollen und Rechte</h3><p><b>Administrator:</b> alle Server und Benutzer verwalten.</p><p><b>Verwalter:</b> eigene Server anlegen; zugewiesene Server konfigurieren, installieren, bedienen, sichern und löschen.</p><p><b>Operator:</b> zugewiesene Server starten, stoppen und neu starten sowie Konsolenbefehle senden.</p><p><b>Betrachter:</b> Status, Konsole und Mod-Liste zugewiesener Server ansehen.</p><p>Verwalter dürfen ausführbare Mods und JARs hochladen. Vergib diese Rolle nur an vertrauenswürdige Personen.</p></div>`;
-  } catch (error) { toast(error.message); }
+  $('#main').innerHTML = heading('Benutzerverwaltung', 'Konten, Rollen und Zugriff auf einzelne Server.', '<button class="primary" data-user-new>＋ Benutzer anlegen</button>') + '<div id="user-list"><div class="panel">Benutzer werden geladen …</div></div>';
+  try { await refreshUsers(); } catch (error) { toast(error.message); }
+}
+
+async function refreshUsers() {
+  const list = $('#user-list'), request = ++usersRequest;
+  if (!list || state.page !== 'users' || state.sid || state.user?.role !== 'admin') return;
+  const data = await api('/users');
+  if (request !== usersRequest || state.page !== 'users' || state.sid || $('#user-list') !== list || document.querySelector('dialog[open]')) return;
+  state.users = data.users;
+  const content = `<div class="table-wrap" role="region" aria-label="Benutzerliste" tabindex="0"><table><thead><tr><th>Benutzer</th><th>Rolle</th><th>Zugriff</th><th>Status</th><th>Aktionen</th></tr></thead><tbody>${state.users.map(u => `<tr><td><b>${esc(u.username)}</b>${u.id === state.user.id ? '<span class="subline">Dein Konto</span>' : ''}</td><td>${esc(roleNames[u.role])}</td><td>${u.role === 'admin' ? 'Alle Server' : `${u.server_ids.length} zugewiesen`}</td><td><span class="badge ${u.active ? 'running' : 'stopped'}">${u.active ? 'Aktiv' : 'Deaktiviert'}</span></td><td class="user-actions"><button class="secondary" data-user-edit="${u.id}">Bearbeiten</button>${u.id !== state.user.id ? `<button class="text-button" data-user-delete="${u.id}">Löschen</button>` : ''}</td></tr>`).join('')}</tbody></table></div><div class="panel role-guide"><h3>Rollen und Rechte</h3><p><b>Administrator:</b> alle Server und Benutzer verwalten.</p><p><b>Verwalter:</b> eigene Server anlegen; zugewiesene Server konfigurieren, installieren, bedienen, sichern und löschen.</p><p><b>Operator:</b> zugewiesene Server starten, stoppen und neu starten sowie Konsolenbefehle senden.</p><p><b>Betrachter:</b> Status, Konsole und Mod-Liste zugewiesener Server ansehen.</p><p>Verwalter dürfen ausführbare Mods und JARs hochladen. Vergib diese Rolle nur an vertrauenswürdige Personen.</p></div>`;
+  if (list._content !== content) {
+    list.innerHTML = content;
+    list._content = content;
+  }
 }
 
 function openUser(user=null) {
@@ -344,7 +354,7 @@ $('#user-form').addEventListener('submit', async event => {
     await api(uid ? `/users/${uid}` : '/users', {method:uid ? 'PUT' : 'POST',body});
     $('#user-dialog').close(); event.target.reset();
     if (uid === state.user.id) { showLogin(); toast('Konto aktualisiert. Bitte erneut anmelden.'); }
-    else { await renderUsers(); toast('Benutzer gespeichert.'); }
+    else { await refreshUsers(); toast('Benutzer gespeichert.'); }
   } catch (error) { $('#user-error').textContent = error.message; }
   finally { button.disabled = false; }
 });

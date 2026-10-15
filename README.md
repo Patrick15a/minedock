@@ -15,7 +15,7 @@ An initial working panel is deployed in a Debian 13 LXC container behind a separ
 - View console output, send commands and edit configuration files while a server is stopped.
 - Create and download backups of stopped servers.
 - User management with administrator, manager, operator and viewer roles and per-server assignments.
-- Account password changes, session revocation, password hashing and CSRF protection.
+- Account password changes through the sidebar profile name, session revocation, password hashing and CSRF protection.
 - Configurable RAM budget and a dedicated non-root systemd service.
 
 ## CurseForge API key
@@ -26,7 +26,7 @@ See [CurseForge API key](docs/CURSEFORGE.md).
 
 ## Installation
 
-Read the [German installation and operations guide](docs/INSTALLATION.de.md), including the RAM limits and current limitations, before running:
+Read the [installation and operations guide](docs/INSTALLATION.md), including the RAM limits and current limitations, before running:
 
 ```bash
 sudo bash deploy/install.sh
@@ -44,7 +44,7 @@ The helper does not restart the service. Stop managed Minecraft servers and wait
 
 ## Users and updates
 
-See the [roles and permissions guide](docs/USERS.de.md). The existing administrator is migrated automatically, keeping the current password. Role changes, disabled accounts and password changes invalidate existing sessions.
+See the [roles and permissions guide](docs/USERS.md). The existing administrator is migrated automatically, keeping the current password. Role changes, disabled accounts and password changes invalidate existing sessions.
 
 For an existing installation, stop managed Minecraft servers and wait for imports, then run from the new release directory:
 

@@ -47,7 +47,7 @@ nav button b {font-size:11px;font-weight:500;color:var(--muted)}
 .sidebar-bottom {margin-top:auto;border-top:1px solid var(--line);padding-top:12px}
 .account-label,.account {padding:10px 12px;font-size:13px;color:#b5bdca}
 .account {width:100%;text-align:left;border:0;background:none;border-radius:9px}
-.account:hover {background:var(--panel2);color:white}
+.account:hover,.account.active {background:var(--panel2);color:white}
 .main-shell {margin-left:245px;min-height:100vh;display:flex;flex-direction:column;min-width:0}
 main {padding:30px 34px 40px;width:100%;max-width:1800px;margin:0 auto;flex:1;min-width:0}
 .page-footer {display:flex;justify-content:space-between;padding:0 34px 22px;font-size:11px;color:#737f91}
