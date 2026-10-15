@@ -1,8 +1,11 @@
 'use strict';
 const $ = (q) => document.querySelector(q);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const state = {csrf:'', servers:[], host:null, page:'overview', sid:null, tab:'console', cursor:0, query:'', mode:'curseforge', editing:false};
-const labels = {overview:'Übersicht', modpacks:'Modpacks', host:'Host & Ressourcen', archive:'Archiv'};
+const state = {csrf:'', servers:[], host:null, page:'overview', sid:null, tab:'console', cursor:0, query:'', mode:'curseforge', editing:false, user:null, users:[]};
+const labels = {overview:'Übersicht', modpacks:'Modpacks', host:'Host & Ressourcen', archive:'Archiv', users:'Benutzerverwaltung', account:'Mein Konto'};
+const roleNames = {admin:'Administrator',manager:'Verwalter',operator:'Operator',viewer:'Betrachter'};
+const canManage = () => ['admin','manager'].includes(state.user?.role);
+const canOperate = () => ['admin','manager','operator'].includes(state.user?.role);
 const server = () => state.servers.find(s => s.id === state.sid);
 let toastTimer, polling = false;
 
@@ -25,7 +28,10 @@ async function api(url, {method='GET', body, form=false}={}) {
 }
 function showLogin() {
   state.csrf = ''; document.title = 'Anmelden · BexoGames MineDock'; $('#shell').hidden = true; $('#login-screen').hidden = false;
-  $('#server-dialog').close();
+  document.querySelectorAll('dialog').forEach(d => d.close());
+  state.user = null; state.servers = []; state.users = []; state.host = null; state.sid = null; state.page = 'overview';
+  document.querySelectorAll('input[type=password]').forEach(input => input.value = '');
+  $('#main').innerHTML = ''; $('#user-fields').innerHTML = '';
 }
 async function enter() {
   $('#login-screen').hidden = true; $('#shell').hidden = false;
@@ -61,7 +67,7 @@ function connection() {
 function heading(title, text, action='') {
   return `<div class="page-heading"><div><h1>${title}</h1><p>${text}</p></div><div class="heading-actions">${connection()}${action}</div></div>`;
 }
-function newButton(label='＋ Server erstellen') { return `<button class="primary" data-new="curseforge">${label}</button>`; }
+function newButton(label='＋ Server erstellen') { if (!canManage()) return ''; return `<button class="primary" data-new="curseforge">${label}</button>`; }
 function cards() {
   const archive = state.page === 'archive';
   const items = state.servers.filter(s => !!s.archived === archive && `${s.name} ${s.pack}`.toLowerCase().includes(state.query.toLowerCase()));
@@ -74,6 +80,8 @@ function render() {
   document.title = `${state.sid ? server()?.name || 'Server' : labels[state.page]} · BexoGames MineDock`;
   $('#nav-count').textContent = state.servers.filter(s => !s.archived).length;
   if (state.sid) return renderDetail();
+  if (state.page === 'users') return renderUsers();
+  if (state.page === 'account') return renderAccount();
   if (state.page === 'overview' || state.page === 'archive') {
     $('#main').innerHTML = heading(state.page === 'archive' ? 'Serverarchiv' : 'Serverübersicht', state.page === 'archive' ? 'Deine bisherigen Welten bleiben erhalten.' : 'Deine Welten, Modpacks und Ressourcen im Überblick.', newButton()) +
       (!state.host.linux ? '<div class="notice">Lokale Vorschau auf Windows. Minecraft-Prozesse und Loader-Installer starten erst auf deinem Debian-Server. Die angezeigten Host-Ressourcen gehören zu diesem Rechner.</div>' : '') + stats() +
@@ -86,8 +94,9 @@ function render() {
       `<div class="panel"><h3>Gut zu wissen</h3><p>Forge, NeoForge und Fabric werden anhand des Modpack-Manifests installiert. Wähle eine dazu passende, auf dem Host installierte Java-Version. Client-Mods können über die Mod-Liste deaktiviert werden.</p><p>Einige Autoren erlauben keine automatischen Downloads. Fehlende Dateien erscheinen nach dem Import im Tab „Mods“ mit einem Link zum manuellen Download. Klassische Server-ZIPs mit Startskripten werden nicht automatisch ausgeführt.</p></div>`;
   } else {
     $('#main').innerHTML = heading('Host & Ressourcen', 'Ressourcen und Verbindungen deines Minecraft-Containers.') + stats() +
-      `<div class="host-hero"><span class="eyebrow">NATIVES LINUX HOSTING</span><h2>Minecraft-Container</h2><p>MineDock läuft als eigener Dienst. Jeder Minecraft-Server startet als separater Java-Prozess.</p></div><div class="grid-two"><div class="panel"><h3>Host-Konfiguration</h3><div class="kv"><span>Umgebung</span><b>${state.host.linux ? 'Linux' : 'Windows · Vorschau'}</b></div><div class="kv"><span>Minecraft-RAM-Budget</span><b>${state.host.budget_mb/1024} GB</b></div><div class="kv"><span>Gesamter Host-RAM</span><b>${(state.host.memory_total_mb/1024).toFixed(1)} GB</b></div><div class="kv"><span>Konfigurierte Java-Versionen</span><b>${state.host.java_versions.map(esc).join(', ')}</b></div><div class="kv"><span>CurseForge</span><b>${state.host.curseforge_configured ? 'Schlüssel hinterlegt' : 'Schlüssel fehlt'}</b></div></div><div class="panel"><h3>Betrieb & Zugriff</h3><p>Die erste Version verwendet einen Administrator-Zugang. Host-Einstellungen und API-Schlüssel liegen in <code>/etc/minedock/minedock.env</code>.</p><p>Das RAM-Budget reserviert je laufendem Server den Java-Heap plus 768 MB. Es ist eine Startbegrenzung; zusätzliche native Speichernutzung kann darüber hinausgehen.</p><p>Backups entstehen bei gestopptem Server. Vor Wartung am Panel alle Minecraft-Server stoppen.</p><p>MineDock läuft im Minecraft-Container. Euer Apache-Reverse-Proxy übernimmt den HTTPS-Zugriff.</p></div></div>`;
+      `<div class="host-hero"><span class="eyebrow">NATIVES LINUX HOSTING</span><h2>Minecraft-Container</h2><p>MineDock läuft als eigener Dienst. Jeder Minecraft-Server startet als separater Java-Prozess.</p></div><div class="grid-two"><div class="panel"><h3>Host-Konfiguration</h3><div class="kv"><span>Umgebung</span><b>${state.host.linux ? 'Linux' : 'Windows · Vorschau'}</b></div><div class="kv"><span>Minecraft-RAM-Budget</span><b>${state.host.budget_mb/1024} GB</b></div><div class="kv"><span>Gesamter Host-RAM</span><b>${(state.host.memory_total_mb/1024).toFixed(1)} GB</b></div><div class="kv"><span>Konfigurierte Java-Versionen</span><b>${state.host.java_versions.map(esc).join(', ')}</b></div><div class="kv"><span>CurseForge</span><b>${state.host.curseforge_configured ? 'Schlüssel hinterlegt' : 'Schlüssel fehlt'}</b></div></div><div class="panel"><h3>Betrieb & Zugriff</h3><p>Administratoren verwalten Benutzer, Rollen und Serverzuweisungen. Host-Einstellungen und API-Schlüssel liegen in <code>/etc/minedock/minedock.env</code>.</p><p>Das RAM-Budget reserviert je laufendem Server den Java-Heap plus 768 MB. Es ist eine Startbegrenzung; zusätzliche native Speichernutzung kann darüber hinausgehen.</p><p>Backups entstehen bei gestopptem Server. Vor Wartung am Panel alle Minecraft-Server stoppen.</p><p>MineDock läuft im Minecraft-Container. Euer Apache-Reverse-Proxy übernimmt den HTTPS-Zugriff.</p></div></div>`;
   }
+  applyCapabilities();
 }
 
 function settingsFields(s={}) {
@@ -105,6 +114,7 @@ function sourceFields() {
   return `<label>${state.mode === 'zip' ? 'CurseForge-Export (.zip)' : 'Ausführbare Server-JAR'}<input name="upload" type="file" accept="${state.mode === 'zip' ? '.zip' : '.jar'}" required><small>${state.mode === 'zip' ? 'Mit manifest.json im ZIP-Hauptverzeichnis. Maximal 512 MB.' : 'Eine direkt startfähige JAR, kein Forge-/NeoForge-Installer. Maximal 512 MB.'}</small></label>`;
 }
 function openCreate(mode='curseforge', existing=null) {
+  if (!canManage()) return;
   state.mode = mode; state.editing = !!existing;
   const dialog = $('#server-dialog'); dialog.dataset.sid = existing?.id || '';
   $('#dialog-title').textContent = existing ? 'Server installieren' : 'Server erstellen';
@@ -140,7 +150,7 @@ $('#server-form').addEventListener('submit', async event => {
 function renderDetail() {
   const s = server(); if (!s) { state.sid = null; return render(); }
   $('#main').innerHTML = `<div class="detail-top"><button class="back" data-back aria-label="Zurück">←</button><div><h1>${esc(s.name)}</h1><p>${esc(s.pack)} · Port ${s.port} · Java ${esc(s.java)}</p></div><div class="actions"><span id="detail-badge">${badge(s)}</span><button class="primary" data-action="start">▷ Starten</button><button class="secondary" data-action="restart">↻ Neustart</button><button class="secondary" data-action="stop">□ Stoppen</button></div></div><div id="job-status"></div><div class="tabs">${[['console','Konsole'],['mods','Mods'],['settings','Einstellungen'],['files','Dateien'],['backups','Backups']].map(([v,l]) => `<button data-tab="${v}" class="${v===state.tab?'active':''}">${l}</button>`).join('')}</div><div id="tab-content"></div>`;
-  updateDetailStatus(); renderTab();
+  applyCapabilities(); updateDetailStatus(); renderTab();
 }
 function updateDetailStatus() {
   const s = server(); if (!s || !$('#detail-badge')) return;
@@ -149,9 +159,11 @@ function updateDetailStatus() {
     b.disabled = s.archived || s.state === 'busy' || (b.dataset.action === 'start' ? s.state === 'running' || !s.installed || s.missing.length || !s.eula : s.state !== 'running');
   });
   $('#job-status').innerHTML = (s.job?.state === 'running' ? `<div class="notice">${esc(s.job.label)} läuft. Du kannst den Fortschritt in der Konsole verfolgen.</div>` : s.job?.state === 'error' ? `<div class="notice error">${esc(s.job.error)}</div>` : '') + (!s.installed && s.state !== 'busy' && !s.archived ? '<div class="notice">Dieser Server ist noch nicht installiert. <button class="text-button" data-install>Installation auswählen ↗</button></div>' : '') + (s.missing.length ? `<div class="notice">${s.missing.length} Dateien fehlen. Bitte im Tab „Mods“ herunterladen und hochladen.</div>` : '') + (s.installed && !s.eula ? '<div class="notice">Vor dem ersten Start bitte die Minecraft-EULA in den Einstellungen bestätigen.</div>' : '');
+  applyCapabilities();
 }
 async function renderTab() {
   const s = server(), root = $('#tab-content'); if (!s || !root) return;
+  if (!canManage() && ['settings','files','backups'].includes(state.tab)) { state.tab = 'console'; renderDetail(); return; }
   try {
     if (state.tab === 'console') {
       state.cursor = 0;
@@ -159,6 +171,7 @@ async function renderTab() {
       await refreshLogs();
     } else if (state.tab === 'settings') {
       root.innerHTML = `<div class="panel"><h3>Server-Einstellungen</h3><p>Änderungen sind bei gestopptem Server möglich und gelten ab dem nächsten Start.</p><form id="settings-form"><fieldset ${s.state !== 'stopped' || s.archived ? 'disabled' : ''}>${settingsFields(s)}<button class="primary" type="submit">Einstellungen speichern</button></fieldset></form></div>${!s.archived ? '<div class="panel"><h3>Server archivieren</h3><p>Stoppt die Verwaltung dieses Servers und gibt seinen Port frei. Die Dateien bleiben auf dem Host erhalten.</p><button class="danger" data-archive>Ins Archiv verschieben</button></div>' : ''}`;
+      root.innerHTML += `<div class="panel danger-zone"><h3>Server dauerhaft löschen</h3><p>Entfernt diesen Server einschließlich aller Welten, Mods und MineDock-Backups. Der Server muss gestoppt sein; laufende Vorgänge müssen beendet sein.</p><button class="danger" data-delete-server ${s.state !== 'stopped' ? 'disabled' : ''}>Server löschen</button></div>`;
     } else if (state.tab === 'mods') {
       root.innerHTML = '<div class="panel">Mod-Liste wird geladen …</div>';
       const mods = await api(`/servers/${s.id}/mods`); if (state.tab !== 'mods' || state.sid !== s.id) return;
@@ -170,6 +183,7 @@ async function renderTab() {
       root.innerHTML = `<div class="panel"><h3>Backups</h3><p>Erstellt ein vollständiges Archiv des Serververzeichnisses. Der Server muss dafür gestoppt sein. Wiederherstellung erfolgt in dieser Version über die Debian-Shell.</p><button class="primary" data-backup ${s.state !== 'stopped' || s.archived ? 'disabled' : ''}>＋ Backup erstellen</button><div id="backup-list"></div></div>`;
       await refreshBackups();
     }
+    applyCapabilities();
   } catch (e) { toast(e.message); }
 }
 async function refreshLogs() {
@@ -191,14 +205,28 @@ async function refreshBackups() {
   $('#backup-list').innerHTML = data.length ? data.map(b => `<div class="file-row"><span class="file-name">${esc(b.name)}<br><small>${b.size_mb} MB</small></span><a href="/api/servers/${sid}/backups/${encodeURIComponent(b.name)}">Herunterladen ↓</a></div>`).join('') : '<div class="empty-small">Noch keine Backups erstellt.</div>';
 }
 async function refresh() {
-  const data = await api('/overview'); state.servers = data.servers; state.host = data.host;
+  const data = await api('/overview'); state.servers = data.servers; state.host = data.host; state.user = data.user;
+  $('.account-label').textContent = `${roleNames[state.user.role]} · ${state.user.username}`;
+  $('nav [data-page=users]').hidden = state.user.role !== 'admin';
+  $('nav [data-page=modpacks]').hidden = !canManage();
   document.querySelectorAll('.connection-label').forEach(el => el.textContent = state.host.linux ? 'Panel online' : 'Lokale Vorschau');
   document.querySelectorAll('.connection-dot').forEach(el => el.classList.remove('offline'));
 }
 document.addEventListener('click', async event => {
   const b = event.target.closest('button, a.brand'); if (!b || b.disabled) return;
   try {
-    if (b.dataset.page || b.matches('.brand') || b.hasAttribute('data-back')) {
+    if (b.dataset.close) { document.getElementById(b.dataset.close).close(); }
+    else if (b.hasAttribute('data-user-new')) openUser();
+    else if (b.dataset.userEdit) openUser(state.users.find(u => u.id === b.dataset.userEdit));
+    else if (b.dataset.userDelete) {
+      const user = state.users.find(u => u.id === b.dataset.userDelete);
+      const confirmation = prompt(`Benutzer „${user.username}“ dauerhaft löschen? Seine Server bleiben erhalten. Gib den Benutzernamen zur Bestätigung ein.`);
+      if (confirmation === null) return;
+      await api(`/users/${user.id}`, {method:'DELETE',body:{confirmation}});
+      await renderUsers(); toast('Benutzer gelöscht.');
+    }
+    else if (b.hasAttribute('data-delete-server')) openDelete();
+    else if (b.dataset.page || b.matches('.brand') || b.hasAttribute('data-back')) {
       if (b.matches('.brand')) event.preventDefault();
       state.page = b.dataset.page || 'overview'; state.sid = null; state.query = ''; render();
     } else if (b.dataset.new) openCreate(b.dataset.new);
@@ -263,7 +291,7 @@ setInterval(async () => {
   try {
     await refresh();
     if (state.sid) { updateDetailStatus(); await refreshLogs(); if (state.tab === 'backups') await refreshBackups(); }
-    else if (!$('#server-dialog').open && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) render();
+    else if (!document.querySelector('dialog[open]') && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) render();
   } catch (e) { document.querySelectorAll('.connection-label').forEach(el => el.textContent = 'Verbindung unterbrochen'); document.querySelectorAll('.connection-dot').forEach(el => el.classList.add('offline')); }
   finally { polling = false; }
 }, 3500);
@@ -271,3 +299,87 @@ setInterval(async () => {
 
 document.addEventListener('click', event => { const switcher = $('.app-switcher'); if (!switcher.contains(event.target)) switcher.open = false; });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') $('.app-switcher').open = false; });
+
+
+function applyCapabilities() {
+  document.querySelectorAll('[data-new],[data-install],[data-archive],[data-delete-server],[data-backup],.upload-box,[data-mod]').forEach(el => el.hidden = !canManage());
+  document.querySelectorAll('[data-tab=settings],[data-tab=files],[data-tab=backups]').forEach(el => el.hidden = !canManage());
+  document.querySelectorAll('[data-action],#command-form').forEach(el => el.hidden = !canOperate());
+  if ($('#command-form')) $('#command-form').querySelectorAll('input,button').forEach(el => el.disabled = server()?.state !== 'running');
+}
+
+async function renderUsers() {
+  if (state.user?.role !== 'admin') { state.page = 'overview'; render(); return; }
+  $('#main').innerHTML = heading('Benutzerverwaltung', 'Konten, Rollen und Zugriff auf einzelne Server.', '<button class="primary" data-user-new>＋ Benutzer anlegen</button>') + '<div id="user-list" class="panel">Benutzer werden geladen …</div>';
+  try {
+    const data = await api('/users');
+    if (state.page !== 'users' || state.sid || !$('#user-list')) return;
+    state.users = data.users;
+    $('#user-list').outerHTML = `<div class="table-wrap" role="region" aria-label="Benutzerliste" tabindex="0"><table><thead><tr><th>Benutzer</th><th>Rolle</th><th>Zugriff</th><th>Status</th><th>Aktionen</th></tr></thead><tbody>${state.users.map(u => `<tr><td><b>${esc(u.username)}</b>${u.id === state.user.id ? '<span class="subline">Dein Konto</span>' : ''}</td><td>${esc(roleNames[u.role])}</td><td>${u.role === 'admin' ? 'Alle Server' : `${u.server_ids.length} zugewiesen`}</td><td><span class="badge ${u.active ? 'running' : 'stopped'}">${u.active ? 'Aktiv' : 'Deaktiviert'}</span></td><td class="user-actions"><button class="secondary" data-user-edit="${u.id}">Bearbeiten</button>${u.id !== state.user.id ? `<button class="text-button" data-user-delete="${u.id}">Löschen</button>` : ''}</td></tr>`).join('')}</tbody></table></div><div class="panel role-guide"><h3>Rollen und Rechte</h3><p><b>Administrator:</b> alle Server und Benutzer verwalten.</p><p><b>Verwalter:</b> eigene Server anlegen; zugewiesene Server konfigurieren, installieren, bedienen, sichern und löschen.</p><p><b>Operator:</b> zugewiesene Server starten, stoppen und neu starten sowie Konsolenbefehle senden.</p><p><b>Betrachter:</b> Status, Konsole und Mod-Liste zugewiesener Server ansehen.</p><p>Verwalter dürfen ausführbare Mods und JARs hochladen. Vergib diese Rolle nur an vertrauenswürdige Personen.</p></div>`;
+  } catch (error) { toast(error.message); }
+}
+
+function openUser(user=null) {
+  if (state.user?.role !== 'admin') return;
+  $('#user-form').dataset.uid = user?.id || '';
+  $('#user-dialog-title').textContent = user ? 'Benutzer bearbeiten' : 'Benutzer anlegen';
+  $('#user-error').textContent = '';
+  $('#user-fields').innerHTML = `<div class="field-grid"><label>Benutzername<input name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,31}" autocomplete="off" value="${esc(user?.username || '')}"><small>3–32 Zeichen: Buchstaben, Zahlen, Punkt, Bindestrich, Unterstrich.</small></label><label>Rolle<select name="role">${Object.entries(roleNames).map(([value,label]) => `<option value="${value}" ${value === (user?.role || 'viewer') ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="full">${user ? 'Neues Passwort (optional)' : 'Passwort'}<input name="password" type="password" minlength="14" maxlength="1024" autocomplete="new-password" ${user ? '' : 'required'}><small>Mindestens 14 Zeichen.${user ? ' Leer lassen, um das Passwort beizubehalten.' : ''}</small></label></div><label class="check"><input name="active" type="checkbox" ${!user || user.active ? 'checked' : ''}><span>Konto aktiv</span></label><p id="user-all-servers">Administratoren haben Zugriff auf alle Server.</p><fieldset id="user-assignments"><legend>Zugewiesene Server</legend><div class="server-assignments">${state.servers.length ? state.servers.map(s => `<label class="check"><input type="checkbox" name="server_ids" value="${s.id}" ${user?.server_ids.includes(s.id) ? 'checked' : ''}><span>${esc(s.name)}${s.archived ? ' · Archiviert' : ''}</span></label>`).join('') : '<p>Noch keine Server vorhanden.</p>'}</div></fieldset><small>Änderungen beenden vorhandene Sitzungen dieses Benutzers. Mindestens ein aktiver Administrator bleibt erhalten.</small>`;
+  userRoleChanged();
+  $('#user-dialog').showModal();
+}
+
+function userRoleChanged() {
+  const admin = $('#user-form [name=role]')?.value === 'admin';
+  $('#user-assignments').hidden = admin; $('#user-assignments').disabled = admin;
+  $('#user-all-servers').hidden = !admin;
+}
+$('#user-form').addEventListener('change', e => { if (e.target.name === 'role') userRoleChanged(); });
+$('#user-form').addEventListener('submit', async event => {
+  event.preventDefault(); const button = event.submitter; button.disabled = true; $('#user-error').textContent = '';
+  try {
+    const data = new FormData(event.target), uid = event.target.dataset.uid;
+    const body = {username:data.get('username'),role:data.get('role'),active:data.has('active'),server_ids:data.getAll('server_ids')};
+    if (data.get('password')) body.password = data.get('password');
+    await api(uid ? `/users/${uid}` : '/users', {method:uid ? 'PUT' : 'POST',body});
+    $('#user-dialog').close(); event.target.reset();
+    if (uid === state.user.id) { showLogin(); toast('Konto aktualisiert. Bitte erneut anmelden.'); }
+    else { await renderUsers(); toast('Benutzer gespeichert.'); }
+  } catch (error) { $('#user-error').textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
+function renderAccount() {
+  $('#main').innerHTML = heading('Mein Konto', `${esc(state.user.username)} · ${esc(roleNames[state.user.role])}`) + `<div class="panel account-panel"><h3>Passwort ändern</h3><p>Nach der Änderung musst du dich erneut anmelden. Alle bestehenden Sitzungen deines Kontos werden beendet.</p><form id="password-form"><label>Bisheriges Passwort<input type="password" name="current_password" required autocomplete="current-password"></label><label>Neues Passwort<input type="password" name="new_password" required minlength="14" maxlength="1024" autocomplete="new-password"></label><label>Neues Passwort wiederholen<input type="password" name="repeat_password" required minlength="14" maxlength="1024" autocomplete="new-password"></label><p class="error" id="password-error" role="alert"></p><button class="primary" type="submit">Passwort ändern</button></form></div>`;
+}
+document.addEventListener('submit', async event => {
+  if (event.target.id !== 'password-form') return;
+  event.preventDefault(); const button = event.submitter; button.disabled = true;
+  try {
+    const data = new FormData(event.target);
+    if (data.get('new_password') !== data.get('repeat_password')) throw new Error('Die neuen Passwörter stimmen nicht überein.');
+    await api('/account/password',{method:'POST',body:{current_password:data.get('current_password'),new_password:data.get('new_password')}});
+    showLogin(); toast('Passwort geändert. Bitte erneut anmelden.');
+  } catch (error) { if ($('#password-error')) $('#password-error').textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
+function openDelete() {
+  const s = server(); if (!canManage() || !s || s.state !== 'stopped') return;
+  $('#delete-form').dataset.sid = s.id; $('#delete-form').dataset.name = s.name;
+  $('#delete-description').textContent = `Gib „${s.name}“ ein, um diesen Server endgültig zu löschen.`;
+  $('#delete-form [name=confirmation]').value = ''; $('#delete-error').textContent = ''; $('#delete-submit').disabled = true;
+  $('#delete-dialog').showModal();
+}
+$('#delete-form [name=confirmation]').addEventListener('input', event => {
+  $('#delete-submit').disabled = event.target.value !== $('#delete-form').dataset.name;
+});
+$('#delete-form').addEventListener('submit', async event => {
+  event.preventDefault(); const button = event.submitter; button.disabled = true;
+  try {
+    await api(`/servers/${event.target.dataset.sid}`, {method:'DELETE',body:{confirmation:event.target.confirmation.value}});
+    $('#delete-dialog').close(); state.sid = null;
+    await refresh(); render(); toast('Server einschließlich Dateien und Backups dauerhaft gelöscht.');
+  } catch (error) { $('#delete-error').textContent = error.message; }
+  finally { button.disabled = false; }
+});

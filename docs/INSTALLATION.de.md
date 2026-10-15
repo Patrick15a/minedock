@@ -1,6 +1,6 @@
 # MineDock
 
-Privates Minecraft-Java-Panel für **Debian 13, ohne Docker**, mit einem Administrator und einem gemeinsamen Minecraft-RAM-Budget von 32 GiB. Eigenständige Python/FastAPI-Anwendung mit einer deutschen Browseroberfläche. Daten, Zugang und Serverprozesse liegen auf deinem Host; keine Sites-/Cloud-Abhängigkeit.
+Privates Minecraft-Java-Panel für **Debian 13, ohne Docker**, mit Benutzerrollen und einem gemeinsamen Minecraft-RAM-Budget von 32 GiB. Eigenständige Python/FastAPI-Anwendung mit einer deutschen Browseroberfläche. Daten, Zugang und Serverprozesse liegen auf deinem Host; keine Sites-/Cloud-Abhängigkeit.
 
 ## Gestaltung
 
@@ -124,7 +124,7 @@ Beim Start werden `-Xmx` plus 768 MiB pro laufendem Server gegen das gemeinsame 
 
 ## Betrieb und Grenzen dieser ersten Version
 
-- Einzelner vertrauenswürdiger Administrator. Keine Benutzerrollen, Mandantentrennung oder Trennung der Minecraft-Prozesse durch eigene Benutzer/Container. Hochgeladene Mods und JARs führen Code unter dem Dienstbenutzer aus und können dessen Daten lesen. Nur vertrauenswürdige Dateien verwenden.
+- Benutzerrollen und Serverzuweisungen kontrollieren den Panel-Zugriff. Keine Trennung der Minecraft-Prozesse durch eigene Benutzer/Container. Administratoren und Verwalter müssen vertrauenswürdig sein. Hochgeladene Mods und JARs führen Code unter dem Dienstbenutzer aus und können dessen Daten lesen. Nur vertrauenswürdige Dateien verwenden.
 - Der Dienst läuft ohne root und kann nur seinen Datenbereich schreiben. Java-Prozesse gehören zum Dienst. Beim regulären Panel-Stopp werden sie geordnet beendet; nach einem Panel-/Host-Neustart werden sie **manuell** gestartet. Minecraft schreibt zusätzlich eigene Logs im Serververzeichnis; Panel-Konsolenpuffer und Sitzungen gehen beim Neustart verloren.
 - Modpack-Updates werden als **neuer Server** installiert. Kein Überschreiben bestehender Welten und kein automatisches In-place-Upgrade.
 - Archive behalten ihre Dateien. Wiederherstellung eines archivierten Verwaltungsdatensatzes ist noch nicht in der Oberfläche vorhanden. Ein archivierter Server kann weiterhin gelesen und sein vorhandenes Backup heruntergeladen werden.
@@ -146,9 +146,19 @@ python3 -m venv .venv
 
 Das Testsystem verwendet temporäre Daten und simulierte externe Downloads/Java-Prozesse. Es kontaktiert CurseForge nicht. Niemals echte Serverdaten als Testverzeichnis setzen.
 
+## Benutzer und Rollen
+
+Siehe [Benutzerverwaltung, Rollen und Löschen](USERS.de.md). Der bestehende Administrator wird beim ersten Start übernommen. Danach liegen Konten und Passwort-Hashes in der Datenbank; der Installations-Hash setzt ein dort geändertes Passwort nicht zurück.
+
 ## Upgrade
 
-Alle Minecraft-Server im Panel stoppen, anschließend `sudo systemctl stop minedock`. Daten und Konfiguration sichern. Nur Anwendungscode (`app`), Abhängigkeiten und gezielt geprüfte Deployment-Dateien aus der neuen Version nach `/opt/minedock` übernehmen, dann Abhängigkeiten aus deren Lockdatei installieren. `/var/lib/minedock` und `/etc/minedock` erhalten. systemd-Änderungen prüfen, gegebenenfalls `systemctl daemon-reload`, dann `systemctl start minedock` und Konsole prüfen. Das Erstinstallationsskript überschreibt keine vorhandene Installation.
+Alle von MineDock verwalteten Minecraft-Server stoppen und laufende Importe abwarten. Den Panel-Dienst für die Vorprüfung laufen lassen. Aus dem entpackten neuen Projektverzeichnis:
+
+```bash
+sudo /opt/minedock/.venv/bin/python deploy/update.py
+```
+
+Das Skript prüft die vorhandene Installation und unveränderte Abhängigkeiten, sichert Anwendung und Datenbank unter `/var/backups/minedock` und ersetzt den Anwendungscode. Bei einem fehlgeschlagenen Dienststart werden Code und Datenbank zurückgesetzt. Die bestehende Environment-Datei, systemd-Einstellungen, RAM-Grenzen, private Menüverknüpfungen und Minecraft-Dateien bleiben erhalten. Die Sicherung ist nur für root zugänglich. Danach im Browser neu laden und erneut anmelden.
 
 ## Technische Quellen
 

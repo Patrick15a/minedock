@@ -8,13 +8,14 @@ An initial working panel is deployed in a Debian 13 LXC container behind a separ
 
 ## Features
 
-- Create, configure, start, stop, restart and archive Minecraft servers.
+- Create, configure, start, stop, restart, archive and permanently delete Minecraft servers.
 - Install Vanilla, upload a runnable server JAR, or import a CurseForge file link or manifest ZIP.
 - Resolve Fabric, Forge and NeoForge loaders from a CurseForge manifest.
 - Upload, enable, disable and remove mods; show missing files for manual upload.
 - View console output, send commands and edit configuration files while a server is stopped.
 - Create and download backups of stopped servers.
-- One administrator account, password hashing, session authentication and CSRF protection.
+- User management with administrator, manager, operator and viewer roles and per-server assignments.
+- Account password changes, session revocation, password hashing and CSRF protection.
 - Configurable RAM budget and a dedicated non-root systemd service.
 
 ## CurseForge API key
@@ -41,6 +42,18 @@ sudo /opt/minedock/.venv/bin/python deploy/set_curseforge_key.py
 
 The helper does not restart the service. Stop managed Minecraft servers and wait for imports to finish before restarting MineDock.
 
+## Users and updates
+
+See the [roles and permissions guide](docs/USERS.de.md). The existing administrator is migrated automatically, keeping the current password. Role changes, disabled accounts and password changes invalidate existing sessions.
+
+For an existing installation, stop managed Minecraft servers and wait for imports, then run from the new release directory:
+
+```bash
+sudo /opt/minedock/.venv/bin/python deploy/update.py
+```
+
+The updater requires unchanged dependencies, backs up the application and database, and restores both if the new service fails its startup check. Existing environment settings, systemd limits and server files are preserved.
+
 ## Development
 
 Python 3.11 or later:
@@ -56,6 +69,6 @@ Tests use temporary data and mocked external downloads/processes. See [validatio
 
 ## Limitations
 
-This is an early single-administrator project. It does not isolate individual Minecraft servers from each other. Uploaded JARs and mods execute as the service user and must be trusted. There is no automatic in-place modpack upgrade, backup restoration UI, role management or automatic Minecraft restart after a host reboot. Larger ZIPs and downloads are subject to documented limits.
+This is an early project. It does not isolate individual Minecraft servers from each other. Uploaded JARs and mods execute as the service user and must be trusted. There is no automatic in-place modpack upgrade, backup restoration UI or automatic Minecraft restart after a host reboot. Larger ZIPs and downloads are subject to documented limits.
 
 The repository uses the GNU General Public License v3.0; see [LICENSE](LICENSE). MineDock is not affiliated with Mojang, Microsoft, CurseForge or Overwolf.

@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import shutil
+import sqlite3
 import tarfile
 import threading
 import time
@@ -16,6 +17,7 @@ from typing import Literal
 import psutil
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -26,12 +28,14 @@ STATIC = Path(__file__).parent / 'static'
 sessions = {}
 attempts = {}
 auth_lock = threading.Lock()
+DUMMY_PASSWORD_HASH = core.hash_password(secrets.token_urlsafe(32))
 
 
 @asynccontextmanager
 async def lifespan(app):
-    if not core.PASSWORD_HASH:
-        raise RuntimeError('MINEDOCK_PASSWORD_HASH fehlt. Zuerst deploy/configure.py ausführen.')
+    core.init()
+    if not any(u['role'] == 'admin' and u['active'] for u in core.users()):
+        raise RuntimeError('Kein aktiver Administrator vorhanden. Erstinstallation mit deploy/configure.py vorbereiten.')
     yield
     manager.shutdown()
 
@@ -65,7 +69,8 @@ app.add_middleware(BodyLimit)
 async def security(request, call_next):
     if request.url.path.startswith('/api/') and request.url.path != '/api/login':
         try:
-            auth(request)
+            info = auth(request)
+            authorize_request(request, info)
         except HTTPException as exc:
             return JSONResponse({'detail': exc.detail}, status_code=exc.status_code, headers={'Cache-Control':'no-store'})
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
@@ -81,6 +86,12 @@ async def security(request, call_next):
     if request.url.path.startswith('/api'):
         response.headers['Cache-Control'] = 'no-store'
     return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, exc):
+    # Do not reflect password values from validation failures into API responses.
+    return JSONResponse({'detail': [{k: error[k] for k in ('type', 'loc', 'msg')} for error in exc.errors()]}, status_code=422)
 
 
 @app.exception_handler(ValueError)
@@ -102,7 +113,36 @@ def auth(request: Request):
             raise HTTPException(401, 'Bitte anmelden.')
         if request.method not in ('GET', 'HEAD') and not secrets.compare_digest(request.headers.get('x-csrf-token', ''), session['csrf']):
             raise HTTPException(403, 'Sitzungsschutz fehlgeschlagen. Seite neu laden.')
-        return session
+        user = core.user_by_id(session.get('user_id'))
+        if not user or not user['active'] or user['session_version'] != session.get('version'):
+            sessions.pop(session_id, None)
+            raise HTTPException(401, 'Die Anmeldung ist abgelaufen oder die Kontorechte wurden geändert.')
+        return {**session, 'user': core.public_user(user)}
+
+
+def authorize_request(request, info):
+    user = info['user']
+    path, method = request.url.path, request.method
+    if path in ('/api/session', '/api/logout', '/api/account/password'):
+        return
+    if path == '/api/overview' and method == 'GET':
+        return
+    if user['role'] == 'admin':
+        return
+    if path == '/api/servers' and method == 'POST' and user['role'] == 'manager':
+        return
+    match = re.fullmatch(r'/api/servers/([a-f0-9]{16})(.*)', path)
+    if match:
+        sid, suffix = match.groups()
+        if sid not in user['server_ids']:
+            raise HTTPException(404, 'Server nicht gefunden.')
+        if user['role'] == 'manager':
+            return
+        if method == 'GET' and suffix in ('/logs', '/mods'):
+            return
+        if user['role'] == 'operator' and method == 'POST' and suffix in ('/action/start', '/action/stop', '/action/restart', '/command'):
+            return
+    raise HTTPException(403, 'Für diese Aktion fehlen die Berechtigungen.')
 
 
 class Login(BaseModel):
@@ -122,8 +162,9 @@ def login(body: Login, request: Request, response: Response):
         if record['count'] >= 8 or len(attempts) > 10000:
             raise HTTPException(429, 'Zu viele Anmeldeversuche. In fünf Minuten erneut versuchen.')
         record['count'] += 1
-    valid = core.verify_password(body.password, core.PASSWORD_HASH)
-    if not valid or body.username != 'admin':
+    user = core.user_by_name(body.username)
+    valid = core.verify_password(body.password, user['password_hash'] if user else DUMMY_PASSWORD_HASH)
+    if not valid or not user or not user['active']:
         raise HTTPException(401, 'Benutzername oder Passwort falsch.')
     sid = secrets.token_urlsafe(32)
     csrf = secrets.token_urlsafe(32)
@@ -134,14 +175,14 @@ def login(body: Login, request: Request, response: Response):
                 del sessions[key]
         if len(sessions) >= 50:
             sessions.pop(next(iter(sessions)))
-        sessions[sid] = {'csrf': csrf, 'expires': now + 12 * 3600}
+        sessions[sid] = {'csrf': csrf, 'expires': now + 12 * 3600, 'user_id': user['id'], 'version': user['session_version']}
     response.set_cookie('minedock', sid, httponly=True, secure=core.SECURE, samesite='strict', max_age=43200)
-    return {'csrf': csrf}
+    return {'csrf': csrf, 'user': core.public_user(user)}
 
 
 @app.get('/api/session')
 def session(info=Depends(auth)):
-    return {'csrf': info['csrf'], 'username': 'admin'}
+    return {'csrf': info['csrf'], 'username': info['user']['username'], 'user': info['user']}
 
 
 @app.post('/api/logout')
@@ -190,10 +231,11 @@ def editable(sid):
 
 
 @app.get('/api/overview')
-def overview(_=Depends(auth)):
-    servers = [manager.snapshot(s) for s in core.rows()]
+def overview(info=Depends(auth)):
+    user = info['user']
+    servers = [manager.snapshot(s) for s in core.rows() if user['role'] == 'admin' or s['id'] in user['server_ids']]
     memory = psutil.virtual_memory()
-    return {'servers': servers, 'host': {'memory_total_mb': round(memory.total / 1048576),
+    return {'servers': servers, 'user': user, 'host': {'memory_total_mb': round(memory.total / 1048576),
             'memory_available_mb': round(memory.available / 1048576), 'budget_mb': core.BUDGET_MB,
             'reserved_mb': sum(s['memory_mb'] + 768 for s in servers if s['state'] == 'running'),
             'disk_free_gb': round(shutil.disk_usage(core.ROOT).free / 1024**3, 1),
@@ -202,7 +244,7 @@ def overview(_=Depends(auth)):
 
 
 @app.post('/api/servers')
-def create_server(body: Settings, _=Depends(auth)):
+def create_server(body: Settings, info=Depends(auth)):
     with manager.lock:
         validate_settings(body)
         sid = secrets.token_hex(8)
@@ -210,6 +252,8 @@ def create_server(body: Settings, _=Depends(auth)):
                'pack': 'Noch nicht installiert', 'loader': '', 'version': '', 'launch': []}
         (core.ROOT / 'servers' / sid).mkdir()
         core.save(cfg)
+        if info['user']['role'] != 'admin':
+            core.grant_server(info['user']['id'], sid)
     return manager.snapshot(cfg)
 
 
@@ -450,6 +494,81 @@ def download_backup(sid: str, name: str, _=Depends(auth)):
     if not path.is_file():
         raise HTTPException(404)
     return FileResponse(path, filename=name)
+
+
+class UserSettings(BaseModel):
+    username: str = Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$')
+    role: Literal['admin', 'manager', 'operator', 'viewer']
+    active: bool = True
+    server_ids: list[str] = Field(default_factory=list, max_length=1000)
+    password: str | None = Field(default=None, min_length=14, max_length=1024)
+
+
+class Confirmation(BaseModel):
+    confirmation: str = Field(min_length=1, max_length=100)
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(max_length=1024)
+    new_password: str = Field(min_length=14, max_length=1024)
+
+
+@app.get('/api/users')
+def list_users(_=Depends(auth)):
+    return {'users': core.users(), 'roles': core.ROLES}
+
+
+@app.post('/api/users')
+def create_user(body: UserSettings, info=Depends(auth)):
+    return core.write_user(**body.model_dump(), actor_id=info['user']['id'])
+
+
+@app.put('/api/users/{uid}')
+def update_user(uid: str, body: UserSettings, info=Depends(auth)):
+    return core.write_user(**body.model_dump(), uid=uid, actor_id=info['user']['id'])
+
+
+@app.delete('/api/users/{uid}')
+def remove_user(uid: str, body: Confirmation, info=Depends(auth)):
+    core.delete_user(uid, body.confirmation, info['user']['id'])
+    return {'ok': True}
+
+
+@app.post('/api/account/password')
+def password_change(body: PasswordChange, info=Depends(auth)):
+    core.change_password(info['user']['id'], body.current_password, body.new_password)
+    return {'ok': True}
+
+
+@app.delete('/api/servers/{sid}')
+def delete_server(sid: str, body: Confirmation, _=Depends(auth)):
+    with manager.lock, core.LOCK:
+        manager.idle(sid)
+        cfg = core.get(sid)
+        if body.confirmation != cfg['name']:
+            raise ValueError('Servernamen zur Bestätigung exakt eingeben.')
+        directory = core.safe_path(core.ROOT, 'servers/' + sid)
+        stage = core.safe_path(core.ROOT, 'uploads/' + sid + '-stage')
+        backup_root = core.safe_path(core.ROOT, 'backups')
+        backup_paths = []
+        for path in backup_root.glob(sid + '-*'):
+            if re.fullmatch(re.escape(sid) + r'-[0-9]{8}-[0-9]{6}-[a-f0-9]{6}\.tar\.(?:gz|partial)', path.name):
+                backup_paths.append(core.safe_path(backup_root, path.name))
+        try:
+            for root in (directory, stage):
+                if root.exists():
+                    shutil.rmtree(root)
+            for path in backup_paths:
+                path.unlink(missing_ok=True)
+            with core.connect() as conn:
+                conn.execute('DELETE FROM servers WHERE id=?', (sid,))
+        except (OSError, sqlite3.Error):
+            raise ValueError('Löschen nicht vollständig abgeschlossen. Berechtigungen und Datenträger prüfen und das Löschen erneut ausführen.') from None
+        manager.processes.pop(sid, None)
+        manager.jobs.pop(sid, None)
+        manager.logs.pop(sid, None)
+        manager.sequence.pop(sid, None)
+    return {'ok': True}
 
 
 @app.get('/')

@@ -2,7 +2,7 @@
 
 ## Repository snapshot check
 
-On 14 October 2026, all 49 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
+On 15 October 2026, all 77 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
 
 ## Verified before repository preparation
 
@@ -11,6 +11,14 @@ On 14 October 2026, all 49 automated tests passed on Windows with Python 3.12. T
 - Desktop and mobile layout checks; no JavaScript or CSP errors in the checked browser flow.
 - Automated checks for authentication, CSRF, upload/archive safety, staged imports, missing mods, hash checking and process arguments use simulated downloads/processes.
 - Separate tests cover trusted reverse-proxy headers, provider-specific download errors and validated API-key replacement.
+
+## User management and deletion
+
+- Automated coverage includes migration of the existing administrator, role and server assignment enforcement, session revocation, last-admin protection, password changes, and password redaction in validation errors.
+- Deletion tests cover running/busy servers, exact name confirmation, owned backup cleanup, symlink rejection and retry after filesystem failure.
+- Headless Chrome checks cover account creation, assignments, viewer restrictions, password change and re-login, mobile layout, and typed server deletion. No JavaScript errors occurred.
+- Five updater tests cover successful replacement, database/code rollback, syntax rejection, failed backup and failed directory replacement.
+- The role update has been tested locally; installation of this update in the production container remains pending.
 
 ## Not yet verified end to end
 
