@@ -2,7 +2,7 @@
 
 ## Repository snapshot check
 
-On 15 October 2026, all 114 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
+On 15 October 2026, all 127 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
 
 ## Verified before repository preparation
 
@@ -28,6 +28,12 @@ On 15 October 2026, all 114 automated tests passed on Windows with Python 3.12. 
 - The old filename allowlist rejected apostrophes in this mod's JAR and in NoCube's Farmers Compats. All 180 JAR basenames from the local matching server pack pass the revised validation. No pack content is included in the repository.
 - 37 new regression cases cover original names with apostrophes and Unicode, UTF-8 filename limits, traversal and control-character rejection, the entry-47 import path, manual missing-file uploads, and mod enable/disable/removal including long names.
 - Downloads and loader execution in import tests are simulated. The full live pack import remains to be retried after deploying this fix.
+
+## Mixed mod/resource manifests
+
+- Create a Colony 1.0.6 includes resource pack entries at positions 63, 120 and 167: Ore Variants, Minecolonies Refreshed and Created Simple Storage Network.
+- 13 regression cases verify confirmed resource/shader archives are skipped without downloading or blocking startup, including entries marked required and files without download URLs. Unknown archives, mismatched projects and other games still produce explicit errors.
+- A simulated 213-entry import completes with 210 mod files and three logged client resource pack skips. A separate offline run using the actual local ZIP also passes manifest validation and copies its overrides, with simulated metadata, downloads and loader execution. Real downloads and Forge execution remain outside these tests.
 
 ## Not yet verified end to end
 

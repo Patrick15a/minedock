@@ -122,6 +122,22 @@ def filename(value):
     return value
 
 
+def client_archive_type(project, file_info):
+    # A modpack manifest also lists client resource/shader archives. Do not
+    # infer their role from the extension alone or from the optional flag.
+    name = file_info.get('fileName')
+    if not isinstance(name, str) or not name.lower().endswith('.zip'):
+        return None
+    project_info = cf(f'mods/{project}')
+    classes = {12: 'Client-Ressourcenpaket', 6552: 'Client-Shaderpaket'}
+    if (project_info.get('id') == project and project_info.get('gameId') == 432
+            and project_info.get('classId') in classes):
+        return classes[project_info['classId']]
+    raise ValueError(f'ZIP-Datei {name[:240]!r} ist laut CurseForge kein bestätigtes '
+                     'Client-Ressourcen- oder Shaderpaket. Dieser Dateityp wird '
+                     'im Serverimport nicht unterstützt; die Datei wurde nicht übersprungen.')
+
+
 def inspect_zip(archive):
     with zipfile.ZipFile(archive) as zf:
         infos = zf.infolist()
@@ -292,12 +308,20 @@ def install(sid, mode, source=None, version=None):
             loaders = manifest['minecraft']['modLoaders']
             loader = next((l['id'] for l in loaders if l.get('primary')), loaders[0]['id'])
             extract_overrides(source, manifest, stage)
+            skipped_client_archives = 0
             for index, ref in enumerate(manifest['files']):
                 project, file_id = int(ref['projectID']), int(ref['fileID'])
                 if project <= 0 or file_id <= 0:
                     raise ValueError('Ungültige CurseForge-Datei-ID.')
                 info = cf(f'mods/{project}/files/{file_id}')
                 try:
+                    archive_type = client_archive_type(project, info)
+                    if archive_type:
+                        skipped_client_archives += 1
+                        manager.log(sid, f'[Import {index + 1}/{len(manifest["files"])}] '
+                                         f'{info["fileName"][:240]!r}: {archive_type} '
+                                         'übersprungen (nur für Minecraft-Clients).')
+                        continue
                     name = filename(info.get('fileName'))
                 except ValueError as exc:
                     raise ValueError(f'[Import {index + 1}/{len(manifest["files"])}] '
@@ -313,6 +337,9 @@ def install(sid, mode, source=None, version=None):
                         website = 'https://www.curseforge.com/minecraft/search?search=' + str(project)
                     missing.append({'name': name, 'project': project, 'file': file_id, 'hash': file_hash(info),
                                     'url': website + ('/files/' + str(file_id) if '?' not in website else '')})
+            if skipped_client_archives:
+                manager.log(sid, f'[MineDock] {skipped_client_archives} Client-Ressourcen-/Shaderpaket(e) '
+                                 'übersprungen. Sie werden auf den Minecraft-Clients verwendet.')
         manager.log(sid, f'[MineDock] Installiere {loader} für Minecraft {version}.')
         launch = install_loader(sid, cfg, stage, version, loader)
         properties(cfg, stage)
