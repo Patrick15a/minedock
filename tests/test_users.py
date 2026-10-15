@@ -48,7 +48,7 @@ def test_non_admin_sees_only_assigned_servers_and_cannot_probe_others(client,sid
         ('GET','backups',None),('GET','backups/secret.tar.gz',None),
         ('POST','install',{'mode':'vanilla','version':'1.21.1'}),('POST','action/start',None),
         ('POST','command',{'command':'stop'}),('PUT','file',{'path':'x.txt','content':'bad'}),
-        ('POST','backup',None),('POST','mods',{'name':'x.jar','action':'remove'}),
+        ('POST','mods/scan',None),('POST','backup',None),('POST','mods',{'name':'x.jar','action':'remove'}),
     ]:
         assert member.request(method,f'/api/servers/{other}/{path}',json=body).status_code==404,path
     assert member.put(f'/api/servers/{other}',json=config).status_code==404
@@ -66,7 +66,7 @@ def test_readers_cannot_access_files_backups_or_modify_assigned_servers(client,s
     member=sign_in(user)
     assert member.get(f'/api/servers/{sid}/logs').status_code==200
     assert member.get(f'/api/servers/{sid}/mods').status_code==200
-    for method,path,body in [('GET','files',None),('GET','file?path=x.txt',None),('GET','backups',None),('GET','backups/x.tar.gz',None),('POST','backup',None),('POST','action/archive',None),('POST','install',{'mode':'vanilla','version':'1.21.1'}),('POST','mods',{'name':'x.jar','action':'remove'}),('PUT','file',{'path':'x.txt','content':'bad'})]:
+    for method,path,body in [('GET','files',None),('GET','file?path=x.txt',None),('GET','backups',None),('GET','backups/x.tar.gz',None),('POST','mods/scan',None),('POST','backup',None),('POST','action/archive',None),('POST','install',{'mode':'vanilla','version':'1.21.1'}),('POST','mods',{'name':'x.jar','action':'remove'}),('PUT','file',{'path':'x.txt','content':'bad'})]:
         assert member.request(method,f'/api/servers/{sid}/{path}',json=body).status_code==403,path
     assert member.post('/api/servers',json={**config,'port':25566}).status_code==403
     assert member.put(f'/api/servers/{sid}',json=config).status_code==403

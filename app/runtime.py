@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import psutil
 
-from . import core
+from . import core, modscan
 
 
 class Manager:
@@ -68,7 +68,8 @@ class Manager:
                     memory = round(psutil.Process(self.processes[sid].pid).memory_info().rss / 1048576)
                 except psutil.Error:
                     pass
-            return {**config, 'state': 'busy' if job and job['state'] == 'running' else 'running' if active else 'stopped',
+            public = {k: v for k, v in config.items() if k not in ('mod_scan', 'mod_sources', 'mod_overrides', 'mod_server_reference', 'mod_manifest_key')}
+            return {**public, 'state': 'busy' if job and job['state'] == 'running' else 'running' if active else 'stopped',
                     'memory_used_mb': memory, 'job': job}
 
     def start(self, sid):
@@ -96,6 +97,7 @@ class Manager:
             java = core.JAVA.get(cfg['java'])
             if not java or not os.path.isfile(java):
                 raise ValueError('Die ausgewählte Java-Version ist auf dem Host nicht konfiguriert.')
+            modscan.run(sid, self)
             cmd = [java, '-Xms512M', f"-Xmx{cfg['memory_mb']}M", *args, 'nogui']
             proc = subprocess.Popen(cmd, cwd=directory, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True, encoding='utf8', errors='replace',

@@ -15,7 +15,7 @@ from urllib.parse import quote, urlparse, urljoin
 
 import httpx
 
-from . import core
+from . import core, modscan
 from .runtime import manager
 
 MAX_FILE = 512 * 1024 * 1024
@@ -284,6 +284,8 @@ def install(sid, mode, source=None, version=None):
     try:
         missing = []
         pack_name = 'Vanilla'
+        pack_info = None
+        pack_project = None
         if mode == 'vanilla':
             loader = 'vanilla'
         else:
@@ -297,6 +299,7 @@ def install(sid, mode, source=None, version=None):
                 if not mod:
                     raise ValueError('Modpack nicht gefunden.')
                 info = cf(f"mods/{mod['id']}/files/{file_id}")
+                pack_info, pack_project = info, mod['id']
                 url = info.get('downloadUrl')
                 if not url:
                     raise ValueError('Dieses Modpack muss manuell heruntergeladen und als ZIP importiert werden.')
@@ -304,6 +307,8 @@ def install(sid, mode, source=None, version=None):
                 fetch(url, source, expected=file_hash(info))
             manifest = inspect_zip(source)
             pack_name = str(manifest.get('name', 'Modpack'))[:100]
+            cfg['mod_manifest_key'] = modscan.manifest_key(manifest)
+            cfg['mod_sources'] = {}
             version = manifest['minecraft']['version']
             loaders = manifest['minecraft']['modLoaders']
             loader = next((l['id'] for l in loaders if l.get('primary')), loaders[0]['id'])
@@ -328,8 +333,10 @@ def install(sid, mode, source=None, version=None):
                                      f'CurseForge-Projekt {project}, Datei {file_id}: {exc}') from exc
                 manager.log(sid, f'[Import {index + 1}/{len(manifest["files"])}] {name}')
                 target = core.safe_path(stage, 'mods/' + name)
+                cfg['mod_sources'][name] = {'project': project, 'file': file_id}
                 if info.get('downloadUrl'):
                     fetch(info['downloadUrl'], target, expected=file_hash(info))
+                    cfg['mod_sources'][name]['sha256'] = modscan.digest(target)
                 else:
                     project_info = cf(f'mods/{project}')
                     website = project_info.get('links', {}).get('websiteUrl', '')
@@ -340,6 +347,10 @@ def install(sid, mode, source=None, version=None):
             if skipped_client_archives:
                 manager.log(sid, f'[MineDock] {skipped_client_archives} Client-Ressourcen-/Shaderpaket(e) '
                                  'übersprungen. Sie werden auf den Minecraft-Clients verwendet.')
+        cfg.update(loader=loader, version=version, pack=pack_name)
+        if pack_info and pack_info.get('serverPackFileId'):
+            attach_server_reference(sid, cfg, stage, pack_project, pack_info['serverPackFileId'])
+        modscan.scan(stage, cfg, lambda message: manager.log(sid, message))
         manager.log(sid, f'[MineDock] Installiere {loader} für Minecraft {version}.')
         launch = install_loader(sid, cfg, stage, version, loader)
         properties(cfg, stage)
@@ -359,3 +370,21 @@ def install(sid, mode, source=None, version=None):
         shutil.rmtree(stage, ignore_errors=True)
         if mode == 'zip' and source:
             Path(source).unlink(missing_ok=True)
+
+
+def attach_server_reference(sid, cfg, stage, project, file_id):
+    archive = stage / '.minedock-server-reference.zip'
+    try:
+        info = cf(f'mods/{project}/files/{int(file_id)}')
+        if info.get('id') != int(file_id) or info.get('modId') != project or not info.get('isServerPack'):
+            raise ValueError('Die Serverpack-Zuordnung ist nicht eindeutig.')
+        if not info.get('downloadUrl') or not file_hash(info):
+            raise ValueError('Serverpack-Download oder Prüfsumme fehlt.')
+        fetch(info['downloadUrl'], archive, expected=file_hash(info))
+        cfg['mod_server_reference'] = {'keep': modscan.server_inventory(archive),
+            'label': f'CurseForge-Serverpack {project}/{file_id}', 'project': project, 'file': int(file_id)}
+        manager.log(sid, '[MineDock] Zugeordnetes Serverpack als Referenz für die Mod-Prüfung geladen.')
+    except (ValueError, OSError, zipfile.BadZipFile, httpx.HTTPError, KeyError, TypeError):
+        manager.log(sid, '[MineDock] Serverpack-Abgleich nicht verfügbar; Metadaten und geprüfte Profile werden verwendet.')
+    finally:
+        archive.unlink(missing_ok=True)

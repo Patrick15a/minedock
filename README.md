@@ -4,7 +4,7 @@ MineDock is a self-hosted Minecraft Java server management panel for Debian 13. 
 
 ## Project status
 
-An initial working panel is deployed in a Debian 13 LXC container behind a separate Apache HTTPS reverse proxy. Panel installation, login and service operation have been verified. Minecraft gameplay and real Fabric/Forge/NeoForge installation have not yet been validated end to end.
+An initial working panel is deployed in a Debian 13 LXC container behind a separate Apache HTTPS reverse proxy. Panel installation, login and service operation have been verified. User-provided logs also confirm a completed modpack import and Forge loader installation. Minecraft gameplay and in-game connections have not yet been validated end to end.
 
 ## Features
 
@@ -12,6 +12,7 @@ An initial working panel is deployed in a Debian 13 LXC container behind a separ
 - Install Vanilla, upload a runnable server JAR, or import a CurseForge file link or manifest ZIP.
 - Resolve Fabric, Forge and NeoForge loaders from a CurseForge manifest.
 - Upload, enable, disable and remove mods; show missing files for manual upload.
+- Automatically disable confirmed client mods with dependency checks, exact server-pack comparisons, visible reasons and persistent manual overrides. See [mod compatibility checks](docs/MOD_COMPATIBILITY.md).
 - View console output, send commands and edit configuration files while a server is stopped.
 - Create and download backups of stopped servers.
 - User management with administrator, manager, operator and viewer roles and per-server assignments.

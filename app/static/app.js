@@ -175,7 +175,7 @@ async function renderTab() {
     } else if (state.tab === 'mods') {
       root.innerHTML = '<div class="panel">Mod-Liste wird geladen …</div>';
       const mods = await api(`/servers/${s.id}/mods`); if (state.tab !== 'mods' || state.sid !== s.id) return;
-      root.innerHTML = `<div class="panel"><h3>Deine Mods</h3><p>Zum Hochladen, Aktivieren oder Entfernen den Server stoppen. Mods und Server müssen dieselbe Loader- und Minecraft-Version verwenden.</p>${s.missing.length ? `<div class="notice"><b>Manueller Download erforderlich</b>${s.missing.map(m => `<div class="file-row"><span class="file-name">${esc(m.name)}</span><a href="${esc(m.url)}" target="_blank" rel="noreferrer">CurseForge ↗</a></div>`).join('')}</div>` : ''}<div class="upload-box"><h3>Mod-Dateien hinzufügen</h3><p>JAR-Datei auswählen. Vorhandene Dateien werden nicht überschrieben.</p><input type="file" id="mod-upload" accept=".jar" multiple aria-label="Mod-Dateien hochladen" ${s.state !== 'stopped' || !s.installed || s.archived ? 'disabled' : ''}></div>${mods.length ? mods.map(m => `<div class="file-row"><span class="file-name">${esc(m.name)}<br><small>${m.size_mb} MB · ${m.enabled ? 'Aktiv' : 'Deaktiviert'}</small></span><button class="secondary" data-mod="${esc(m.name)}" data-mod-action="toggle" ${s.state !== 'stopped' || s.archived ? 'disabled' : ''}>${m.enabled ? 'Deaktivieren' : 'Aktivieren'}</button><button class="text-button" data-mod="${esc(m.name)}" data-mod-action="remove" ${s.state !== 'stopped' || s.archived ? 'disabled' : ''}>Entfernen</button></div>`).join('') : '<div class="empty-small">Noch keine Mod-Dateien vorhanden.</div>'}</div>`;
+      root.innerHTML = `<div class="panel"><h3>Deine Mods</h3><p>Zum Hochladen, Aktivieren oder Entfernen den Server stoppen. Mods und Server müssen dieselbe Loader- und Minecraft-Version verwenden.</p><div class="mod-check"><b>Automatische Mod-Prüfung</b>${s.mod_scan_summary?.note ? `<p class="mod-conflict">${esc(s.mod_scan_summary.note)}</p>` : ''}<p>Nach Importen, Uploads und vor dem Start werden eindeutige Client-Mods deaktiviert. Abhängigkeiten und manuelle Entscheidungen werden berücksichtigt. Unklare Dateien bleiben unverändert.</p><button class="secondary" data-mod-scan ${s.state !== 'stopped' || !s.installed || s.archived ? 'disabled' : ''}>Mods jetzt prüfen</button><small>${mods.filter(m => m.assessment?.status === 'conflict').length} Hinweis(e) zur Prüfung</small><details class="upload-box"><summary>Serverpack als Vergleich hinzufügen</summary><p>Optional: Server-ZIP für genau dieselbe Modpack-Version. MineDock vergleicht die enthaltenen Mods, sobald alle Server-Mods unverändert vorhanden sind. Startskripte werden nicht ausgeführt.</p><input type="file" id="serverpack-upload" accept=".zip" aria-label="Serverpack als Vergleich hochladen" ${s.state !== 'stopped' || !s.installed || s.archived ? 'disabled' : ''}></details></div>${s.missing.length ? `<div class="notice"><b>Manueller Download erforderlich</b>${s.missing.map(m => `<div class="file-row"><span class="file-name">${esc(m.name)}</span><a href="${esc(m.url)}" target="_blank" rel="noreferrer">CurseForge ↗</a></div>`).join('')}</div>` : ''}<div class="upload-box"><h3>Mod-Dateien hinzufügen</h3><p>JAR-Datei auswählen. Vorhandene Dateien werden nicht überschrieben.</p><input type="file" id="mod-upload" accept=".jar" multiple aria-label="Mod-Dateien hochladen" ${s.state !== 'stopped' || !s.installed || s.archived ? 'disabled' : ''}></div>${mods.length ? mods.map(m => `<div class="file-row"><span class="file-name">${esc(m.name)}<br><small>${m.size_mb} MB · ${m.enabled ? 'Aktiv' : 'Deaktiviert'}</small>${modAssessment(m)}</span><button class="secondary" data-mod="${esc(m.name)}" data-mod-action="toggle" ${s.state !== 'stopped' || s.archived ? 'disabled' : ''}>${m.enabled ? 'Deaktivieren' : 'Aktivieren'}</button>${m.assessment?.override && m.assessment.override !== 'auto' ? `<button class="secondary" data-mod="${esc(m.name)}" data-mod-action="automatic" ${s.state !== 'stopped' || s.archived ? 'disabled' : ''}>Automatik verwenden</button>` : ''}<button class="text-button" data-mod="${esc(m.name)}" data-mod-action="remove" ${s.state !== 'stopped' || s.archived ? 'disabled' : ''}>Entfernen</button></div>`).join('') : '<div class="empty-small">Noch keine Mod-Dateien vorhanden.</div>'}</div>`;
     } else if (state.tab === 'files') {
       const files = await api(`/servers/${s.id}/files`); if (state.tab !== 'files' || state.sid !== s.id) return;
       root.innerHTML = `<div class="panel"><h3>Konfigurationsdateien</h3><p>Textdateien bis 1 MB. Server-Eigenschaften werden über den Tab „Einstellungen“ verwaltet.</p>${files.length ? `<label>Datei auswählen<select id="file-select"><option value="">Bitte auswählen …</option>${files.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select></label><textarea id="file-editor" class="editor" aria-label="Dateiinhalt" spellcheck="false" readonly></textarea><div class="inline-actions"><button class="primary" id="save-file" disabled>Datei speichern</button><small id="file-info"></small></div>` : '<div class="empty-small">Nach der Serverinstallation erscheinen hier die Konfigurationsdateien.</div>'}</div>`;
@@ -239,6 +239,9 @@ document.addEventListener('click', async event => {
     } else if (b.hasAttribute('data-archive')) {
       if (!confirm('Server archivieren? Seine Dateien bleiben erhalten.')) return;
       await api(`/servers/${state.sid}/action/archive`, {method:'POST'}); await refresh(); state.sid = null; render(); toast('Server archiviert.');
+    } else if (b.hasAttribute('data-mod-scan')) {
+      b.disabled = true;
+      await api(`/servers/${state.sid}/mods/scan`, {method:'POST'}); await refresh(); await renderTab(); toast('Mod-Prüfung abgeschlossen.');
     } else if (b.dataset.mod) {
       if (b.dataset.modAction === 'remove' && !confirm(`„${b.dataset.mod}“ wirklich entfernen?`)) return;
       await api(`/servers/${state.sid}/mods`, {method:'POST',body:{name:b.dataset.mod,action:b.dataset.modAction}}); await renderTab();
@@ -248,7 +251,7 @@ document.addEventListener('click', async event => {
       b.disabled = true;
       await api(`/servers/${state.sid}/file`,{method:'PUT',body:{path:$('#file-select').value,content:$('#file-editor').value}}); toast('Datei gespeichert.'); b.disabled = false;
     }
-  } catch (e) { toast(e.message); if (b.dataset.action || b.id === 'save-file') b.disabled = false; }
+  } catch (e) { toast(e.message); if (b.dataset.action || b.id === 'save-file' || b.hasAttribute('data-mod-scan')) b.disabled = false; }
 });
 document.addEventListener('input', e => {
   if (e.target.id === 'search') { state.query = e.target.value; $('#cards').innerHTML = cards(); }
@@ -264,6 +267,11 @@ document.addEventListener('change', async e => {
       const allowed = server().state === 'stopped' && !server().archived && path !== 'server.properties';
       $('#file-editor').readOnly = !allowed; $('#save-file').disabled = !allowed;
       $('#file-info').textContent = allowed ? 'Änderungen gelten ab dem nächsten Serverstart.' : 'Nur Lesen';
+    } else if (e.target.id === 'serverpack-upload') {
+      const file = e.target.files[0]; if (!file) return;
+      e.target.disabled = true; const data = new FormData(); data.append('file', file);
+      await api(`/servers/${state.sid}/upload?kind=serverpack`, {method:'POST',body:data,form:true});
+      await refresh(); await renderTab(); toast('Serverpack-Referenz gespeichert und Mods geprüft.');
     } else if (e.target.id === 'mod-upload') {
       e.target.disabled = true;
       for (const file of e.target.files) {
@@ -272,7 +280,7 @@ document.addEventListener('change', async e => {
       }
       await refresh(); updateDetailStatus(); await renderTab(); toast('Mod-Dateien hochgeladen.');
     }
-  } catch (error) { toast(error.message); if (e.target.id === 'mod-upload') e.target.disabled = false; }
+  } catch (error) { toast(error.message); if (['mod-upload','serverpack-upload'].includes(e.target.id)) e.target.disabled = false; }
 });
 document.addEventListener('submit', async event => {
   if (!['settings-form','command-form'].includes(event.target.id)) return;
@@ -304,7 +312,7 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape') $('.
 
 
 function applyCapabilities() {
-  document.querySelectorAll('[data-new],[data-install],[data-archive],[data-delete-server],[data-backup],.upload-box,[data-mod]').forEach(el => el.hidden = !canManage());
+  document.querySelectorAll('[data-new],[data-install],[data-archive],[data-delete-server],[data-backup],.upload-box,[data-mod],[data-mod-scan]').forEach(el => el.hidden = !canManage());
   document.querySelectorAll('[data-tab=settings],[data-tab=files],[data-tab=backups]').forEach(el => el.hidden = !canManage());
   document.querySelectorAll('[data-action],#command-form').forEach(el => el.hidden = !canOperate());
   if ($('#command-form')) $('#command-form').querySelectorAll('input,button').forEach(el => el.disabled = server()?.state !== 'running');
@@ -393,3 +401,9 @@ $('#delete-form').addEventListener('submit', async event => {
   } catch (error) { $('#delete-error').textContent = error.message; }
   finally { button.disabled = false; }
 });
+
+function modAssessment(mod) {
+  const a = mod.assessment || {};
+  const labels = {client: 'Client-/Modpack-Regel', conflict: 'Prüfung erforderlich', manual: 'Manuell festgelegt', unknown: 'Nicht eindeutig erkannt', unchecked: 'Keine Client-Kennzeichnung'};
+  return `<span class="mod-assessment ${a.status === 'conflict' ? 'mod-conflict' : ''}"><b>${esc(labels[a.status] || 'Noch nicht geprüft')}</b><br>${esc(a.reason || 'Die Prüfung erfolgt spätestens vor dem nächsten Start.')}</span>`;
+}

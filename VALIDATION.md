@@ -2,7 +2,7 @@
 
 ## Repository snapshot check
 
-On 15 October 2026, all 127 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
+On 15 October 2026, all 165 automated tests passed on Windows with Python 3.12. The installation shell script passed Bash syntax validation. A Starlette test-client deprecation warning remains. Private deployment addresses, local access files and generated test artifacts were excluded from the snapshot.
 
 ## Verified before repository preparation
 
@@ -42,3 +42,11 @@ On 15 October 2026, all 127 automated tests passed on Windows with Python 3.12. 
 - A complete CurseForge modpack import.
 
 The repository contains no real server data, private reference screenshots, QA credentials or deployment access keys. Test credentials in the test suite are synthetic. The published template retains generic host defaults rather than copying the private deployment configuration.
+
+## Automatic mod compatibility checks
+
+- 38 additional regression cases cover loader-scoped Fabric detection, ambiguous/oversized metadata, dependency retention including nested JARs and dependency chains, Forge/NeoForge dependency sides, exact rules/profiles, custom-mod preservation, manual override persistence, imports/uploads and safe server-pack inventory parsing.
+- Existing permission tests now cover the manual scan endpoint. The GET mod list is verified read-only; full scan/provenance records are excluded from periodic overview responses.
+- Chrome checks verify automatic disabling, visible dependency conflicts, persisted manual activation after reload, returning to automatic mode, viewer restrictions, and a 390-pixel layout without horizontal overflow. No JavaScript errors were observed.
+- The 180 actual JARs in the matching local Create a Colony server ZIP were inspected to check metadata compatibility. Mod binaries and private QA data are not included in the repository.
+- Downloads/processes in regression tests remain simulated. This scanner cannot guarantee launch compatibility, and the production updater still requires a root invocation after managed servers have stopped.

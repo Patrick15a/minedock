@@ -21,7 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from . import core, installer
+from . import core, installer, modscan
 from .runtime import manager
 
 STATIC = Path(__file__).parent / 'static'
@@ -322,7 +322,7 @@ def logs(sid: str, after: int = 0, _=Depends(auth)):
 
 
 @app.post('/api/servers/{sid}/upload')
-def upload(sid: str, file: UploadFile, kind: Literal['modpack', 'mod', 'server'] = 'mod', _=Depends(auth)):
+def upload(sid: str, file: UploadFile, kind: Literal['modpack', 'mod', 'server', 'serverpack'] = 'mod', _=Depends(auth)):
     # UploadFile is spooled to disk by Starlette; the ASGI and reverse-proxy limits bound total input.
     target = core.ROOT / 'uploads' / secrets.token_hex(16)
     try:
@@ -342,6 +342,13 @@ def upload(sid: str, file: UploadFile, kind: Literal['modpack', 'mod', 'server']
                 installer.inspect_zip(target)
                 manager.submit(sid, 'Modpack-Import', lambda source=target: installer.install(sid, 'zip', source))
                 target = None
+            elif kind == 'serverpack':
+                if not cfg['installed'] or not cfg.get('mod_sources'):
+                    raise ValueError('Eine Serverpack-Referenz benötigt einen mit dieser MineDock-Version importierten Modpack-Server.')
+                cfg['mod_server_reference'] = {'keep': modscan.server_inventory(target),
+                    'label': 'hochgeladenes Serverpack'}
+                core.save(cfg)
+                modscan.run(sid, manager)
             else:
                 name = installer.filename(file.filename or '')
                 if not zipfile.is_zipfile(target):
@@ -364,11 +371,17 @@ def upload(sid: str, file: UploadFile, kind: Literal['modpack', 'mod', 'server']
                             if actual.lower() != expected.lower():
                                 raise ValueError('Datei-Prüfsumme stimmt nicht mit CurseForge überein.')
                     cfg['missing'] = [m for m in cfg['missing'] if m['name'] != name]
-                if destination.exists():
-                    raise ValueError('Datei existiert bereits. Bestehende Mod zuerst deaktivieren oder entfernen.')
+                if destination.exists() or (kind == 'mod' and destination.with_name(name + '.disabled').exists()):
+                    raise ValueError('Datei existiert bereits, gegebenenfalls deaktiviert. Bestehende Mod zum Ersetzen zuerst entfernen.')
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 target.replace(destination)
+                if kind == 'mod':
+                    source = cfg.get('mod_sources', {}).get(name)
+                    if source is not None:
+                        source['sha256'] = modscan.digest(destination)
                 core.save(cfg)
+                if kind == 'mod':
+                    modscan.run(sid, manager)
     finally:
         file.file.close()
         if target:
@@ -378,33 +391,65 @@ def upload(sid: str, file: UploadFile, kind: Literal['modpack', 'mod', 'server']
 
 @app.get('/api/servers/{sid}/mods')
 def mods(sid: str, _=Depends(auth)):
-    root = core.folder(sid) / 'mods'
-    return [{'name': p.name, 'enabled': p.suffix == '.jar', 'size_mb': round(p.stat().st_size / 1048576, 2)}
-            for p in sorted(root.iterdir()) if p.is_file() and not p.is_symlink() and (p.name.endswith('.jar') or p.name.endswith('.jar.disabled'))] if root.exists() else []
+    with manager.lock:
+        cfg = core.get(sid)
+        root = core.folder(sid) / 'mods'
+        if root.is_symlink():
+            raise ValueError('Das Mod-Verzeichnis darf kein Symlink sein.')
+        result = []
+        for p in sorted(root.iterdir()) if root.exists() else []:
+            if p.is_file() and not p.is_symlink() and (p.name.endswith('.jar') or p.name.endswith('.jar.disabled')):
+                assessment = cfg.get('mod_scan', {}).get(p.name.removesuffix('.disabled'), {})
+                result.append({'name': p.name, 'enabled': p.suffix == '.jar',
+                    'size_mb': round(p.stat().st_size / 1048576, 2),
+                    'assessment': {k: assessment[k] for k in ('status', 'reason', 'override') if k in assessment}})
+        return result
+
+
+@app.post('/api/servers/{sid}/mods/scan')
+def scan_mods(sid: str, _=Depends(auth)):
+    with manager.lock:
+        editable(sid)
+        modscan.run(sid, manager)
+    return {'ok': True}
+
 
 
 class ModAction(BaseModel):
     name: str = Field(max_length=255)
-    action: Literal['toggle', 'remove']
+    action: Literal['toggle', 'remove', 'automatic']
 
 
 @app.post('/api/servers/{sid}/mods')
 def mod_action(sid: str, body: ModAction, _=Depends(auth)):
     with manager.lock:
-        editable(sid)
+        cfg = editable(sid)
         name = body.name.removesuffix('.disabled')
         installer.filename(name)
         path = core.safe_path(core.folder(sid), 'mods/' + body.name)
         if not path.is_file():
             raise ValueError('Mod-Datei nicht gefunden.')
+        family = cfg.get('loader', '').split('-', 1)[0]
+        row = {**modscan.inspect(path, family), 'sha256': modscan.digest(path)}
+        key = modscan.override_key(row, family)
+        overrides = cfg.setdefault('mod_overrides', {})
         if body.action == 'remove':
             path.unlink()
+            cfg.get('mod_scan', {}).pop(name, None)
+            cfg.get('mod_sources', {}).pop(name, None)
+        elif body.action == 'automatic':
+            overrides.pop(key, None)
         else:
-            destination = path.with_name(name if body.name.endswith('.disabled') else name + '.disabled')
+            enabling = body.name.endswith('.disabled')
+            destination = path.with_name(name if enabling else name + '.disabled')
             if destination.exists():
                 raise ValueError('Zieldatei existiert bereits.')
             path.rename(destination)
+            overrides[key] = 'allow' if enabling else 'disable'
+        core.save(cfg)
+        modscan.run(sid, manager)
     return {'ok': True}
+
 
 
 EXTENSIONS = {'.properties', '.json', '.toml', '.yml', '.yaml', '.txt', '.cfg', '.conf'}

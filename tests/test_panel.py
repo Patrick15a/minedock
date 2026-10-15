@@ -235,7 +235,10 @@ def test_memory_budget_blocks_overcommit(client,sid,config,env,monkeypatch):
 
 def test_runtime_spawns_argument_list_without_shell(client,sid,env,monkeypatch):
     manager = env[1]
-    cfg = core.get(sid); cfg.update(installed=True,launch=['-jar','server.jar']); core.save(cfg)
+    cfg = core.get(sid); cfg.update(installed=True,loader='fabric-0.16',launch=['-jar','server.jar']); core.save(cfg)
+    mods = core.folder(sid) / 'mods'; mods.mkdir()
+    with zipfile.ZipFile(mods / 'client.jar', 'w') as archive:
+        archive.writestr('fabric.mod.json', json.dumps({'schemaVersion':1, 'id':'client', 'environment':'client'}))
     monkeypatch.setattr(runtime,'os',types.SimpleNamespace(name='posix',path=types.SimpleNamespace(isfile=lambda _:True)))
     monkeypatch.setattr(runtime.psutil,'virtual_memory',lambda: types.SimpleNamespace(available=64*1024**3))
     process = Mock(); process.poll.return_value = None
@@ -244,6 +247,8 @@ def test_runtime_spawns_argument_list_without_shell(client,sid,env,monkeypatch):
     monkeypatch.setattr(runtime.threading,'Thread',Mock())
     manager.start(sid)
     args, kwargs = popen.call_args
+    assert (mods / 'client.jar.disabled').exists()
+    assert not (mods / 'client.jar').exists()
     assert args[0] == [core.JAVA['21'],'-Xms512M','-Xmx4096M','-jar','server.jar','nogui']
     assert kwargs.get('shell',False) is False
     assert 'CURSEFORGE_API_KEY' not in kwargs['env']
