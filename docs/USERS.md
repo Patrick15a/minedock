@@ -5,11 +5,11 @@ Administrators manage accounts, roles, active status, passwords and server assig
 | Role | Permissions |
 |---|---|
 | Administrator | Manage all servers and users. |
-| Manager (Verwalter) | Create servers; configure, install, operate, back up, archive and delete assigned servers. |
-| Operator | View assigned servers, start, stop and restart them, and send console commands. |
+| Manager (Verwalter) | Create servers; configure, install, operate, back up, archive and delete all servers, including newly created servers. |
+| Operator | View assigned servers (or all servers when enabled), start, stop and restart them, and send console commands. |
 | Viewer (Betrachter) | View the status, console and mod list of assigned servers. |
 
-Non-administrators see only their assigned servers. Servers created by a manager are automatically assigned to that manager. Without an assignment, a user cannot see existing servers. General host resource information remains visible to signed-in users. Files, backups and settings require administrator or manager permissions.
+Administrators and managers have access to all current and future servers. Administrators can enable **Allow access to all servers** for an operator; otherwise operators and viewers see only assigned servers. This option expands server access without granting management or user administration permissions. It is disabled by default for existing and new operators, and is cleared when changing to another role. General host resource information remains visible to signed-in users. Files, backups and settings require administrator or manager permissions.
 
 The API checks permissions on every request. Password, role and assignment changes, deactivation and account deletion invalidate existing sessions. The last active administrator cannot be removed. Administrators cannot deactivate, demote or delete their own account. Deleting a user does not delete any Minecraft servers.
 

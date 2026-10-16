@@ -21,7 +21,7 @@ Required dependencies are checked across the remaining active mods, including mo
 
 Use **Aktivieren** or **Deaktivieren** to save a manual decision. It is scoped to the server, loader and declared mod IDs, so ordinary filename/version changes preserve the decision. When IDs cannot be read, it is scoped to the exact file hash. **Automatik verwenden** clears that decision and runs the scanner again. Already disabled files are never automatically re-enabled, even when a rule disappears or a dependency conflict is discovered.
 
-Only administrators and assigned managers may upload references, run a manual scan or change these decisions. Viewers and operators can read the results. An operator's normal start action includes the same pre-start check as an administrator's start.
+Only administrators and managers may upload references, run a manual scan or change these decisions. Viewers and operators can read the results. An operator's normal start action includes the same pre-start check as an administrator's start.
 
 Checks run while the Minecraft server is stopped. JAR content is inspected as ZIP data; no mod code is executed for detection. Metadata, archive nesting and archive sizes are bounded. Symlinks, duplicate active/disabled filenames and unsafe reference archives are rejected. A scan reads/hashes files locally; it makes no network requests during server startup.
 

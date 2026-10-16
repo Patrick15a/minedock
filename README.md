@@ -15,7 +15,7 @@ An initial working panel is deployed in a Debian 13 LXC container behind a separ
 - Automatically disable confirmed client mods with dependency checks, exact server-pack comparisons, visible reasons and persistent manual overrides. See [mod compatibility checks](docs/MOD_COMPATIBILITY.md).
 - View console output, send commands and edit configuration files while a server is stopped.
 - Create and download backups of stopped servers.
-- User management with administrator, manager, operator and viewer roles and per-server assignments.
+- User management with administrator, manager, operator and viewer roles, per-server assignments, and optional access to all servers for operators. Managers have access to all servers.
 - Account password changes through the sidebar profile name, session revocation, password hashing and CSRF protection.
 - Configurable RAM budget and a dedicated non-root systemd service.
 

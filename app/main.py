@@ -136,7 +136,7 @@ def authorize_request(request, info):
     match = re.fullmatch(r'/api/servers/([a-f0-9]{16})(.*)', path)
     if match:
         sid, suffix = match.groups()
-        if sid not in user['server_ids']:
+        if not core.has_all_servers(user) and sid not in user['server_ids']:
             raise HTTPException(404, 'Server nicht gefunden.')
         if user['role'] == 'manager':
             return
@@ -235,7 +235,7 @@ def editable(sid):
 @app.get('/api/overview')
 def overview(info=Depends(auth)):
     user = info['user']
-    servers = [manager.snapshot(s) for s in core.rows() if user['role'] == 'admin' or s['id'] in user['server_ids']]
+    servers = [manager.snapshot(s) for s in core.rows() if core.has_all_servers(user) or s['id'] in user['server_ids']]
     memory = psutil.virtual_memory()
     return {'servers': servers, 'user': user, 'host': {'memory_total_mb': round(memory.total / 1048576),
             'memory_available_mb': round(memory.available / 1048576), 'budget_mb': core.BUDGET_MB,
@@ -548,6 +548,7 @@ class UserSettings(BaseModel):
     role: Literal['admin', 'manager', 'operator', 'viewer']
     active: bool = True
     server_ids: list[str] = Field(default_factory=list, max_length=1000)
+    all_servers: bool = False
     password: str | None = Field(default=None, min_length=14, max_length=1024)
 
 

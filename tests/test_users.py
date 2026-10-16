@@ -36,7 +36,7 @@ def test_legacy_admin_migration_preserves_password_and_servers(client,sid,monkey
     assert core.get(sid)['name']=='Testwelt'
 
 
-@pytest.mark.parametrize('role',['manager','operator','viewer'])
+@pytest.mark.parametrize('role',['operator','viewer'])
 def test_non_admin_sees_only_assigned_servers_and_cannot_probe_others(client,sid,config,role):
     other=client.post('/api/servers',json={**config,'name':'Private world','port':25566}).json()['id']
     user=make_user(client,sid,role)
@@ -218,3 +218,51 @@ def test_password_validation_does_not_reflect_input(client):
     reply=client.post('/api/users',json={'username':'new','role':'viewer','password':'shortsecret'})
     assert reply.status_code==422
     assert 'shortsecret' not in reply.text
+
+
+@pytest.mark.parametrize('role', ['manager', 'operator'])
+def test_all_server_access_includes_future_servers_without_extra_permissions(client, sid, config, env, monkeypatch, role):
+    user = client.post('/api/users', json={'username': 'globaluser', 'password': PASSWORD, 'role': role, 'all_servers': role == 'operator'}).json()
+    assert user['all_servers'] is True
+    assert user['server_ids'] == []
+    member = sign_in(user)
+    other = client.post('/api/servers', json={**config, 'port': 25566}).json()['id']
+    assert {s['id'] for s in member.get('/api/overview').json()['servers']} == {sid, other}
+    assert member.get(f'/api/servers/{other}/logs').status_code == 200
+    calls = []
+    monkeypatch.setattr(env[1], 'start', lambda target: calls.append(target))
+    assert member.post(f'/api/servers/{other}/action/start').status_code == 200
+    assert calls == [other]
+    assert member.put(f'/api/servers/{other}', json={**config, 'port': 25566}).status_code == (200 if role == 'manager' else 403)
+    assert member.get(f'/api/servers/{other}/files').status_code == (200 if role == 'manager' else 403)
+    assert member.get('/api/users').status_code == 403
+    assert member.put('/api/users/' + user['id'], json={**user, 'role': 'admin'}).status_code == 403
+    member.close()
+
+
+def test_global_operator_revoke_and_role_change(client, sid, config):
+    user = client.post('/api/users', json={'username': 'globalop', 'password': PASSWORD, 'role': 'operator', 'all_servers': True}).json()
+    member = sign_in(user)
+    updated = client.put('/api/users/' + user['id'], json={**user, 'all_servers': False}).json()
+    assert updated['all_servers'] is False
+    assert member.get('/api/overview').status_code == 401
+    member.close()
+    with sign_in(updated) as restricted:
+        assert restricted.get('/api/overview').json()['servers'] == []
+        assert restricted.get(f'/api/servers/{sid}/logs').status_code == 404
+    viewer = client.put('/api/users/' + user['id'], json={**user, 'role': 'viewer'}).json()
+    assert viewer['all_servers'] is False
+    operator = client.put('/api/users/' + user['id'], json={**viewer, 'role': 'operator'}).json()
+    assert operator['all_servers'] is False
+
+
+def test_existing_users_migrate_with_restricted_operators(client, sid):
+    operator = make_user(client, sid, 'operator', 'legacyoperator')
+    manager = make_user(client, sid, 'manager', 'legacymanager')
+    with core.connect() as conn:
+        conn.execute('ALTER TABLE users DROP COLUMN all_servers')
+    core.init()
+    core.init()
+    assert core.public_user(core.user_by_id(operator['id']))['all_servers'] is False
+    assert core.public_user(core.user_by_id(operator['id']))['server_ids'] == [sid]
+    assert core.public_user(core.user_by_id(manager['id']))['all_servers'] is True

@@ -59,6 +59,8 @@ def init():
             id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE,
             password_hash TEXT NOT NULL, role TEXT NOT NULL,
             active INTEGER NOT NULL DEFAULT 1, session_version INTEGER NOT NULL DEFAULT 1)''')
+        if 'all_servers' not in {r['name'] for r in conn.execute('PRAGMA table_info(users)')}:
+            conn.execute('ALTER TABLE users ADD COLUMN all_servers INTEGER NOT NULL DEFAULT 0')
         conn.execute('''CREATE TABLE IF NOT EXISTS server_access (
             user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
@@ -136,10 +138,14 @@ def user_by_id(uid):
     return dict(row) if row else None
 
 
+def has_all_servers(user):
+    return user['role'] in ('admin', 'manager') or (user['role'] == 'operator' and bool(user.get('all_servers', False)))
+
+
 def public_user(user):
     with connect() as conn:
         assigned = [r[0] for r in conn.execute('SELECT server_id FROM server_access WHERE user_id=? ORDER BY server_id', (user['id'],))]
-    return {key: user[key] for key in ('id', 'username', 'role')} | {'active': bool(user['active']), 'server_ids': assigned}
+    return {key: user[key] for key in ('id', 'username', 'role')} | {'active': bool(user['active']), 'server_ids': assigned, 'all_servers': has_all_servers(user)}
 
 
 def users():
@@ -148,7 +154,7 @@ def users():
     return [public_user(user) for user in found]
 
 
-def write_user(username, role, active, server_ids, password=None, uid=None, actor_id=None):
+def write_user(username, role, active, server_ids, password=None, uid=None, actor_id=None, all_servers=False):
     username = username.lower()
     if not re.fullmatch(r'[a-z0-9][a-z0-9_.-]{2,31}', username) or role not in ROLES:
         raise ValueError('Ungültiger Benutzername oder Rolle.')
@@ -156,6 +162,7 @@ def write_user(username, role, active, server_ids, password=None, uid=None, acto
         raise ValueError('Das Passwort muss zwischen 14 und 1024 Zeichen lang sein.')
     if uid is None and password is None:
         raise ValueError('Ein Passwort ist erforderlich.')
+    all_servers = role == 'operator' and bool(all_servers)
     encoded = hash_password(password) if password is not None else None
     with LOCK, connect() as conn:
         conn.execute('BEGIN IMMEDIATE')
@@ -167,19 +174,19 @@ def write_user(username, role, active, server_ids, password=None, uid=None, acto
         if old and old['role'] == 'admin' and old['active'] and (not active or role != 'admin'):
             if conn.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1").fetchone()[0] <= 1:
                 raise ValueError('Mindestens ein aktiver Administrator muss erhalten bleiben.')
-        assigned = sorted(set(server_ids)) if role != 'admin' else []
+        assigned = sorted(set(server_ids)) if role not in ('admin', 'manager') else []
         for sid in assigned:
             if not conn.execute('SELECT 1 FROM servers WHERE id=?', (sid,)).fetchone():
                 raise ValueError('Ein zugewiesener Server existiert nicht mehr.')
         if conn.execute('SELECT 1 FROM users WHERE username=? AND id<>?', (username, uid or '')).fetchone():
             raise ValueError('Dieser Benutzername ist bereits vergeben.')
         if old:
-            conn.execute('UPDATE users SET username=?, role=?, active=?, password_hash=?, session_version=session_version+1 WHERE id=?',
-                         (username, role, int(active), encoded or old['password_hash'], uid))
+            conn.execute('UPDATE users SET username=?, role=?, active=?, password_hash=?, all_servers=?, session_version=session_version+1 WHERE id=?',
+                         (username, role, int(active), encoded or old['password_hash'], int(all_servers), uid))
         else:
             uid = secrets.token_hex(8)
-            conn.execute('INSERT INTO users (id, username, password_hash, role, active) VALUES (?, ?, ?, ?, ?)',
-                         (uid, username, encoded, role, int(active)))
+            conn.execute('INSERT INTO users (id, username, password_hash, role, active, all_servers) VALUES (?, ?, ?, ?, ?, ?)',
+                         (uid, username, encoded, role, int(active), int(all_servers)))
         conn.execute('DELETE FROM server_access WHERE user_id=?', (uid,))
         conn.executemany('INSERT INTO server_access VALUES (?, ?)', [(uid, sid) for sid in assigned])
     return public_user(user_by_id(uid))

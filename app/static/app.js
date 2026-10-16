@@ -343,7 +343,7 @@ async function refreshUsers() {
   const data = await api('/users');
   if (request !== usersRequest || state.page !== 'users' || state.sid || $('#user-list') !== list || document.querySelector('dialog[open]')) return;
   state.users = data.users;
-  const content = `<div class="table-wrap" role="region" aria-label="Benutzerliste" tabindex="0"><table><thead><tr><th>Benutzer</th><th>Rolle</th><th>Zugriff</th><th>Status</th><th>Aktionen</th></tr></thead><tbody>${state.users.map(u => `<tr><td><b>${esc(u.username)}</b>${u.id === state.user.id ? '<span class="subline">Dein Konto</span>' : ''}</td><td>${esc(roleNames[u.role])}</td><td>${u.role === 'admin' ? 'Alle Server' : `${u.server_ids.length} zugewiesen`}</td><td><span class="badge ${u.active ? 'running' : 'stopped'}">${u.active ? 'Aktiv' : 'Deaktiviert'}</span></td><td class="user-actions"><button class="secondary" data-user-edit="${u.id}">Bearbeiten</button>${u.id !== state.user.id ? `<button class="text-button" data-user-delete="${u.id}">Löschen</button>` : ''}</td></tr>`).join('')}</tbody></table></div><div class="panel role-guide"><h3>Rollen und Rechte</h3><p><b>Administrator:</b> alle Server und Benutzer verwalten.</p><p><b>Verwalter:</b> eigene Server anlegen; zugewiesene Server konfigurieren, installieren, bedienen, sichern und löschen.</p><p><b>Operator:</b> zugewiesene Server starten, stoppen und neu starten sowie Konsolenbefehle senden.</p><p><b>Betrachter:</b> Status, Konsole und Mod-Liste zugewiesener Server ansehen.</p><p>Verwalter dürfen ausführbare Mods und JARs hochladen. Vergib diese Rolle nur an vertrauenswürdige Personen.</p></div>`;
+  const content = `<div class="table-wrap" role="region" aria-label="Benutzerliste" tabindex="0"><table><thead><tr><th>Benutzer</th><th>Rolle</th><th>Zugriff</th><th>Status</th><th>Aktionen</th></tr></thead><tbody>${state.users.map(u => `<tr><td><b>${esc(u.username)}</b>${u.id === state.user.id ? '<span class="subline">Dein Konto</span>' : ''}</td><td>${esc(roleNames[u.role])}</td><td>${u.all_servers ? 'Alle Server' : `${u.server_ids.length} zugewiesen`}</td><td><span class="badge ${u.active ? 'running' : 'stopped'}">${u.active ? 'Aktiv' : 'Deaktiviert'}</span></td><td class="user-actions"><button class="secondary" data-user-edit="${u.id}">Bearbeiten</button>${u.id !== state.user.id ? `<button class="text-button" data-user-delete="${u.id}">Löschen</button>` : ''}</td></tr>`).join('')}</tbody></table></div><div class="panel role-guide"><h3>Rollen und Rechte</h3><p><b>Administrator:</b> alle Server und Benutzer verwalten.</p><p><b>Verwalter:</b> Server anlegen; alle Server konfigurieren, installieren, bedienen, sichern und löschen.</p><p><b>Operator:</b> zugewiesene Server oder bei Freigabe alle Server starten, stoppen und neu starten sowie Konsolenbefehle senden.</p><p><b>Betrachter:</b> Status, Konsole und Mod-Liste zugewiesener Server ansehen.</p><p>Verwalter dürfen ausführbare Mods und JARs hochladen. Vergib diese Rolle nur an vertrauenswürdige Personen.</p></div>`;
   if (list._content !== content) {
     list.innerHTML = content;
     list._content = content;
@@ -355,22 +355,28 @@ function openUser(user=null) {
   $('#user-form').dataset.uid = user?.id || '';
   $('#user-dialog-title').textContent = user ? 'Benutzer bearbeiten' : 'Benutzer anlegen';
   $('#user-error').textContent = '';
-  $('#user-fields').innerHTML = `<div class="field-grid"><label>Benutzername<input name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,31}" autocomplete="off" value="${esc(user?.username || '')}"><small>3–32 Zeichen: Buchstaben, Zahlen, Punkt, Bindestrich, Unterstrich.</small></label><label>Rolle<select name="role">${Object.entries(roleNames).map(([value,label]) => `<option value="${value}" ${value === (user?.role || 'viewer') ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="full">${user ? 'Neues Passwort (optional)' : 'Passwort'}<input name="password" type="password" minlength="14" maxlength="1024" autocomplete="new-password" ${user ? '' : 'required'}><small>Mindestens 14 Zeichen.${user ? ' Leer lassen, um das Passwort beizubehalten.' : ''}</small></label></div><label class="check"><input name="active" type="checkbox" ${!user || user.active ? 'checked' : ''}><span>Konto aktiv</span></label><p id="user-all-servers">Administratoren haben Zugriff auf alle Server.</p><fieldset id="user-assignments"><legend>Zugewiesene Server</legend><div class="server-assignments">${state.servers.length ? state.servers.map(s => `<label class="check"><input type="checkbox" name="server_ids" value="${s.id}" ${user?.server_ids.includes(s.id) ? 'checked' : ''}><span>${esc(s.name)}${s.archived ? ' · Archiviert' : ''}</span></label>`).join('') : '<p>Noch keine Server vorhanden.</p>'}</div></fieldset><small>Änderungen beenden vorhandene Sitzungen dieses Benutzers. Mindestens ein aktiver Administrator bleibt erhalten.</small>`;
+  $('#user-fields').innerHTML = `<div class="field-grid"><label>Benutzername<input name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,31}" autocomplete="off" value="${esc(user?.username || '')}"><small>3–32 Zeichen: Buchstaben, Zahlen, Punkt, Bindestrich, Unterstrich.</small></label><label>Rolle<select name="role">${Object.entries(roleNames).map(([value,label]) => `<option value="${value}" ${value === (user?.role || 'viewer') ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="full">${user ? 'Neues Passwort (optional)' : 'Passwort'}<input name="password" type="password" minlength="14" maxlength="1024" autocomplete="new-password" ${user ? '' : 'required'}><small>Mindestens 14 Zeichen.${user ? ' Leer lassen, um das Passwort beizubehalten.' : ''}</small></label></div><label class="check"><input name="active" type="checkbox" ${!user || user.active ? 'checked' : ''}><span>Konto aktiv</span></label><p id="user-all-servers">Administratoren und Verwalter haben Zugriff auf alle Server.</p><label class="check" id="user-global-access"><input name="all_servers" type="checkbox" ${user?.role === 'operator' && user.all_servers ? 'checked' : ''}><span>Zugriff auf alle Server erlauben</span></label><fieldset id="user-assignments"><legend>Zugewiesene Server</legend><div class="server-assignments">${state.servers.length ? state.servers.map(s => `<label class="check"><input type="checkbox" name="server_ids" value="${s.id}" ${user?.server_ids.includes(s.id) ? 'checked' : ''}><span>${esc(s.name)}${s.archived ? ' · Archiviert' : ''}</span></label>`).join('') : '<p>Noch keine Server vorhanden.</p>'}</div></fieldset><small>Änderungen beenden vorhandene Sitzungen dieses Benutzers. Mindestens ein aktiver Administrator bleibt erhalten.</small>`;
   userRoleChanged();
   $('#user-dialog').showModal();
 }
 
 function userRoleChanged() {
-  const admin = $('#user-form [name=role]')?.value === 'admin';
-  $('#user-assignments').hidden = admin; $('#user-assignments').disabled = admin;
-  $('#user-all-servers').hidden = !admin;
+  const role = $('#user-form [name=role]').value;
+  const automatic = ['admin', 'manager'].includes(role);
+  const allServers = $('#user-form [name=all_servers]');
+  allServers.disabled = role !== 'operator';
+  if (role !== 'operator') allServers.checked = false;
+  $('#user-global-access').hidden = role !== 'operator';
+  $('#user-assignments').hidden = automatic || allServers.checked;
+  $('#user-assignments').disabled = automatic;
+  $('#user-all-servers').hidden = !automatic;
 }
-$('#user-form').addEventListener('change', e => { if (e.target.name === 'role') userRoleChanged(); });
+$('#user-form').addEventListener('change', e => { if (['role', 'all_servers'].includes(e.target.name)) userRoleChanged(); });
 $('#user-form').addEventListener('submit', async event => {
   event.preventDefault(); const button = event.submitter; button.disabled = true; $('#user-error').textContent = '';
   try {
     const data = new FormData(event.target), uid = event.target.dataset.uid;
-    const body = {username:data.get('username'),role:data.get('role'),active:data.has('active'),server_ids:data.getAll('server_ids')};
+    const body = {username:data.get('username'),role:data.get('role'),active:data.has('active'),server_ids:data.getAll('server_ids'),all_servers:data.has('all_servers')};
     if (data.get('password')) body.password = data.get('password');
     await api(uid ? `/users/${uid}` : '/users', {method:uid ? 'PUT' : 'POST',body});
     $('#user-dialog').close(); event.target.reset();
